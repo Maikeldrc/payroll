@@ -1,0 +1,6 @@
+{
+  "name": "ITERA Care Management Analytics & Payroll Hub",
+  "description": "Enterprise platform for Care Management Excel/CSV report ingestion, validation, KPI analytics, configurable payroll rules, data quality auditing, executive dashboards, and AI analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

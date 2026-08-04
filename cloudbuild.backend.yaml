@@ -1,0 +1,37 @@
+substitutions:
+  _REGION: us-central1
+  _SERVICE: itera-care-backend
+  _REPOSITORY: itera
+  _ALLOWED_ORIGIN: https://app.itera.health
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.backend", "-t", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}"]
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=itera-care-backend@${PROJECT_ID}.iam.gserviceaccount.com
+      - --ingress=all
+      - --allow-unauthenticated
+      - --set-env-vars=NODE_ENV=production,APP_ENV=production,DATA_STORE=postgres,FIREBASE_PROJECT_ID=${PROJECT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGIN}
+      - --set-secrets=DATABASE_URL=itera-database-url:latest,MALWARE_SCANNER_URL=itera-malware-scanner-url:latest
+      - --min-instances=1
+      - --max-instances=10
+      - --concurrency=40
+      - --cpu=1
+      - --memory=1Gi
+      - --timeout=60s
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

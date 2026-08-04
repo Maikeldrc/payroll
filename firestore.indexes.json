@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "securityAuditEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organization", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "securityAuditEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organization", "order": "ASCENDING" },
+        { "fieldPath": "sequence", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
