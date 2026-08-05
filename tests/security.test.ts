@@ -35,7 +35,10 @@ test("every sensitive route rejects anonymous requests before processing", async
     ["get", "/api/reports/patients.csv?monthOf=2026-08"], ["get", "/api/reports/patients.xlsx?monthOf=2026-08"],
     ["get", "/api/reports/executive.pdf?monthOf=2026-08"], ["get", "/api/audit-events"],
     ["get", "/api/payroll?monthOf=2026-08"],
-    ["post", "/api/imports"], ["post", "/api/session/logout"],
+    ["post", "/api/imports"], ["post", "/api/imports/analyze"], ["post", "/api/imports/confirm"],
+    ["post", "/api/reporting-periods/initialize"], ["post", "/api/reporting-periods/recalculate"],
+    ["post", "/api/reporting-periods/close"], ["post", "/api/reporting-periods/reopen"],
+    ["get", "/api/storage/google/configuration"], ["get", "/api/storage/google/capacity"], ["post", "/api/session/logout"],
   ];
   for (const [method, path] of cases) {
     const response = await request(app)[method](path).set("Origin", "https://app.itera.health");
@@ -57,20 +60,25 @@ test("production configuration fails closed when security dependencies are absen
   }
 });
 
-test("production requires PostgreSQL and data-store selection rejects unknown adapters", () => {
+test("production requires the monthly Google Sheets adapter and explicit resource IDs", () => {
   const previous = { ...process.env };
   try {
     process.env.NODE_ENV = "production";
     process.env.APP_ENV = "production";
     process.env.FIREBASE_PROJECT_ID = "synthetic-project";
     process.env.ALLOWED_ORIGINS = "https://app.itera.health";
-    process.env.MALWARE_SCANNER_URL = "https://scanner.invalid";
-    process.env.DATABASE_URL = "postgresql://service:secret@database.invalid/itera";
+    process.env.AUDIT_FIRESTORE_DATABASE_ID = "itera-audit";
+    process.env.IMPORT_ANALYSIS_TOKEN_SECRET = "synthetic-secret-at-least-32-characters-long";
+    process.env.GOOGLE_SHARED_DRIVE_ID = "synthetic_shared_drive_id";
+    process.env.GOOGLE_ROOT_FOLDER_ID = "synthetic_root_folder_id";
+    process.env.GOOGLE_MONTHLY_FOLDER_ID = "synthetic_monthly_folder_id";
+    process.env.GOOGLE_MASTER_FOLDER_ID = "synthetic_master_folder_id";
+    process.env.GOOGLE_MASTER_SPREADSHEET_ID = "synthetic_master_spreadsheet_id";
     process.env.DATA_STORE = "sheets";
-    assert.throws(() => validateProductionConfiguration(), /DATA_STORE must be postgres/);
+    assert.throws(() => validateProductionConfiguration(), /DATA_STORE must be google-sheets-monthly/);
     process.env.DATA_STORE = "unknown";
-    assert.throws(() => configuredDataStore(), /DATA_STORE must be postgres or sheets/);
-    process.env.DATA_STORE = "postgres";
+    assert.throws(() => configuredDataStore(), /google-sheets-monthly/);
+    process.env.DATA_STORE = "google-sheets-monthly";
     assert.doesNotThrow(() => validateProductionConfiguration());
   } finally {
     process.env = previous;

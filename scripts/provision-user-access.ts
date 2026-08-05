@@ -29,7 +29,7 @@ if (role === "System Administrator" && !process.argv.includes("--allow-system-ad
 
 const organizationIds = list("organizations");
 const practiceIds = list("practices");
-if (organizationIds.length === 0 || practiceIds.length === 0) throw new Error("At least one organization and practice scope are required");
+if (organizationIds.length !== 1 || practiceIds.length === 0) throw new Error("Exactly one organization and at least one practice scope are required");
 const requestedScopes = [organizationIds, practiceIds, list("providers"), list("care-managers"), list("patients"), list("services")];
 if (requestedScopes.some((values) => values.includes("*"))) throw new Error("Wildcard scopes are prohibited; enumerate explicit tenant resources");
 

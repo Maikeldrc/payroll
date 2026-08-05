@@ -11,7 +11,7 @@
     "build:backend": "node ./node_modules/esbuild/bin/esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=backend-dist/server.cjs",
     "start:backend": "node backend-dist/server.cjs",
     "lint": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test:security": "node ./node_modules/tsx/dist/cli.mjs --test tests/security.test.ts",
+    "test:security": "node ./node_modules/tsx/dist/cli.mjs --test tests/security.test.ts tests/monthly-import.test.ts",
     "verify:source": "node scripts/verify-security-source.mjs",
     "verify:static": "node scripts/verify-static-isolation.mjs",
     "access:provision": "node ./node_modules/tsx/dist/cli.mjs scripts/provision-user-access.ts",

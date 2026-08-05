@@ -5,7 +5,8 @@ Security-oriented split deployment:
 - `dist/` is the static-only frontend intended for Vercel. It contains no backend runtime.
 - `server.ts` and `backend/` are the authenticated PHI backend and must run on the approved backend service.
 - The browser calls `VITE_BACKEND_URL` directly. Vercel must never proxy `/api` traffic.
-- Production requires PostgreSQL with row-level security. Google Sheets is a transitional development/migration adapter only, using application-default/workload identity credentials and an explicit spreadsheet allowlist.
+- Production data is partitioned into one Google Spreadsheet per reporting period (`YYYY-MM`) inside a restricted Shared Drive. A Master spreadsheet stores only aggregate/index data and never patient-level PHI.
+- The backend uses its managed Cloud Run service account with Application Default Credentials. JSON keys and domain-wide delegation are prohibited.
 
 ## Local development
 
@@ -39,5 +40,7 @@ npm run release:gate
 The gate performs TypeScript checking, source-policy scanning, backend security tests, static build isolation checks, backend build and dependency auditing for High/Critical advisories.
 
 Passing the code gate does not establish HIPAA compliance. Production also requires the operational, contractual and policy evidence listed in `docs/security/deployment-controls.md`.
+
+The monthly storage model, required environment variables and operational procedures are documented in `docs/monthly-google-storage.md`. No production migration is performed by the application automatically.
 
 The consolidated technical evidence and residual release blockers are recorded in `docs/security/technical-readiness-evidence.md`.

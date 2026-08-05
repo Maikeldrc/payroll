@@ -15,7 +15,7 @@ export const clinicalRouter = Router();
 clinicalRouter.get("/dashboard/summary", authorize("dashboard:view"), async (req, res, next) => {
   try {
     const monthOf = monthSchema.parse(req.query.monthOf);
-    const records = (await readAuthorizedMonthlyRecords(res.locals.principal))
+    const records = (await readAuthorizedMonthlyRecords(res.locals.principal, monthOf))
       .filter((record) => record.monthOf === monthOf);
     const billable = records.filter((record) => record.monthlyBilling > 0);
     const uniquePatients = new Set(records.map((record) => record.patientId)).size;
@@ -37,8 +37,8 @@ clinicalRouter.get("/dashboard/summary", authorize("dashboard:view"), async (req
 
 clinicalRouter.post("/patients/detail", authorize("patient:view"), async (req, res, next) => {
   try {
-    const { recordId } = z.object({ recordId: z.string().min(1).max(128).regex(/^[A-Za-z0-9._-]+$/) }).parse(req.body);
-    const record = (await readAuthorizedMonthlyRecords(res.locals.principal)).find((candidate) => candidate.id === recordId);
+    const { recordId, monthOf } = z.object({ recordId: z.string().min(1).max(128).regex(/^[A-Za-z0-9._-]+$/), monthOf: monthSchema }).parse(req.body);
+    const record = (await readAuthorizedMonthlyRecords(res.locals.principal, monthOf)).find((candidate) => candidate.id === recordId);
     if (!record) return res.status(404).json({ error: "not_found" });
     const role = res.locals.principal.role;
     const canSeeBilling = ["System Administrator", "Billing Administrator", "Operations Administrator"].includes(role);
@@ -60,7 +60,7 @@ clinicalRouter.get("/patients", authorize("patient:view"), async (req, res, next
   try {
     if (noPatientList(res.locals.principal.role)) return res.status(403).json({ error: "patient_detail_not_permitted" });
     const monthOf = monthSchema.parse(req.query.monthOf);
-    const records = (await readAuthorizedMonthlyRecords(res.locals.principal))
+    const records = (await readAuthorizedMonthlyRecords(res.locals.principal, monthOf))
       .filter((record) => record.monthOf === monthOf)
       .slice(0, 200);
     await appendAuditEvent({ principal: res.locals.principal, action: "patient.search", resourceType: "patient-collection", resourceId: monthOf, result: "success", source: "backend", correlationId: res.locals.correlationId });

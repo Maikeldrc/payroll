@@ -1,18 +1,19 @@
-# Required production controls
+# Security deployment controls
 
-Production deployment is blocked until the following evidence is attached to the release record.
+Passing the code gate does not establish HIPAA compliance. Release requires documented organizational approval, an applicable Google Workspace/Cloud BAA, risk analysis, policies, workforce training, incident response, retention, legal review, access reviews, and recovery evidence.
 
-- Vercel deploy contains only `dist/index.html` and fingerprinted assets. Requests to `/api/*`, `/server.cjs` and source maps return 404.
-- Backend runs from `Dockerfile.backend` on an approved service with authenticated deployment access, TLS and restricted log access.
-- `ALLOWED_ORIGINS` contains only the approved production frontend; preview domains are excluded.
-- Firebase privileged roles require MFA, custom claims are assigned only by the provisioning workflow, and client Firestore access is denied.
-- Google credentials use workload identity/application-default credentials; no JSON key is downloaded or stored in CI.
-- Production, staging and development use different Firebase projects and database resources.
-- Production uses PostgreSQL exclusively. `DATA_STORE=sheets` is limited to controlled development or migration staging.
-- The PostgreSQL runtime role cannot own tables or bypass RLS; Cloud SQL encryption at rest, verified TLS, backups and point-in-time recovery are enabled.
-- Google Workspace evidence covers owners, Shared Drive, ACLs, external sharing, publication, add-ons, DLP, audit, Vault, retention and offboarding.
-- Malware scanner is configured and fails closed.
-- Firestore audit rules/indexes are deployed and audit-chain verification is retained with the release evidence.
-- Applicable BAAs and covered-service configurations are approved by legal/compliance.
+Required technical controls:
 
-Google Sheets is a transitional adapter only. The target PostgreSQL schema is defined in `migrations/001_postgresql_target_schema.sql`; production migration requires reconciliation, parallel run, cutover and rollback approval.
+- Vercel serves only static `dist/`; no PHI, secrets, functions, rewrites, proxies, or server-side API routes.
+- Cloud Run is deployed as the distinct `itera-care-backend` service with a dedicated managed service account.
+- Firebase verifies revoked tokens, disabled users, MFA for privileged roles, explicit organization/practice scopes, and access expiry.
+- Production uses `DATA_STORE=google-sheets-monthly`; one restricted Shared Drive spreadsheet exists per `YYYY-MM` and Master contains no patient-level PHI.
+- The backend, never the browser, owns Drive/Sheets credentials and validates every configured resource and permission boundary.
+- Audit and logical locks use the named `itera-audit` Firestore database with deny-by-default client rules, hash chaining, PITR, and restricted service-account access.
+- Imports remain disabled until an approved fail-closed HTTPS malware scanner is operational. Analyze and confirm require the same file hash and a short-lived signed token.
+- Period locks, exact-duplicate suppression, review states, code normalization, calculation versions, close prerequisites, and append-only close/reopen history are enforced by the backend.
+- Log sinks, alerts, Shared Drive audit logs, retention, backups/exports, and restore drills must be evidenced before release.
+
+Never place identifiers, credentials, tokens, PHI, scanner URLs, or Drive/Sheets IDs in `VITE_*`, repository files, browser storage, or client logs.
+
+See `docs/monthly-google-storage.md` for schemas, runtime variables, and the dry-run migration procedure.

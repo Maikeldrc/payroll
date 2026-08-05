@@ -14,6 +14,7 @@ import multer from "multer";
 import { validateProductionConfiguration } from "./config/production";
 import { payrollRouter } from "./routes/payroll";
 import { getAuth } from "firebase-admin/auth";
+import { storageRouter } from "./routes/storage";
 
 function allowedOrigins(): Set<string> {
   const fallback = process.env.NODE_ENV === "production" ? "" : "http://localhost:5173";
@@ -97,6 +98,7 @@ export function createBackendApp() {
   app.use("/api", importsRouter);
   app.use("/api", auditRouter);
   app.use("/api", payrollRouter);
+  app.use("/api", storageRouter);
   app.use("/api", (_req, res) => res.status(404).json({ error: "not_found" }));
 
   app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {

@@ -36,7 +36,7 @@ function permittedColumns(role: string) {
 }
 
 async function scopedRecords(monthOf: string, principal: Express.Locals["principal"]) {
-  return (await readAuthorizedMonthlyRecords(principal)).filter((record) => record.monthOf === monthOf);
+  return (await readAuthorizedMonthlyRecords(principal, monthOf)).filter((record) => record.monthOf === monthOf);
 }
 
 async function recordDownload(res: Response, monthOf: string, format: string) {

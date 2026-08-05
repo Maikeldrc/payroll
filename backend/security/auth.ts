@@ -70,7 +70,7 @@ export async function requireAuthenticatedUser(req: Request, res: Response, next
       serviceCodes: stringArray(decoded.serviceCodes),
     };
     if (process.env.NODE_ENV === "production"
-      && (!scopes.organizationIds.length || !scopes.practiceIds.length
+      && (scopes.organizationIds.length !== 1 || !scopes.practiceIds.length
         || Object.values(scopes).some((values) => values.includes("*")))) {
       return res.status(403).json({ error: "explicit_tenant_scope_required" });
     }

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import type { AuthenticatedPrincipal } from "../security/auth";
+import { auditFirestore } from "./firestore";
 
 export interface AuditEventInput {
   principal: AuthenticatedPrincipal;
@@ -10,6 +11,7 @@ export interface AuditEventInput {
   result: "success" | "denied" | "failed";
   source: string;
   correlationId: string;
+  reportingPeriod?: string;
   reason?: string;
 }
 
@@ -18,8 +20,9 @@ function controlledIdentifier(value: string): string {
 }
 
 export async function appendAuditEvent(input: AuditEventInput): Promise<string> {
-  const db = getFirestore();
-  const organization = input.principal.scopes.organizationIds.find((id) => id !== "*") || "GLOBAL";
+  const db = auditFirestore();
+  const organization = input.principal.scopes.organizationIds[0];
+  if (!organization) throw new Error("Audit event requires an explicit organization");
   const streamRef = db.collection("securityAuditStreams").doc(organization);
   const eventRef = db.collection("securityAuditEvents").doc();
 
@@ -39,6 +42,7 @@ export async function appendAuditEvent(input: AuditEventInput): Promise<string> 
       action: input.action,
       resourceType: input.resourceType,
       resourceId: controlledIdentifier(input.resourceId),
+      reportingPeriod: input.reportingPeriod || null,
       result: input.result,
       source: input.source,
       correlationId: input.correlationId,

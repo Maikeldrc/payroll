@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import ExcelJS from "exceljs";
 import Papa from "papaparse";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import type { MonthlyRecordRow } from "../data/types";
+import { FieldValue } from "firebase-admin/firestore";
+import { auditFirestore } from "../audit/firestore";
 
 const REQUIRED = ["ID", "PatientID", "MRN", "Patient", "OrganizationID", "PracticeID", "ProviderID", "Provider", "CareManagerID", "CareManager", "Service", "MonthOf"];
 const FORMULA_PREFIX = /^[=+\-@\t\r]/;
@@ -87,7 +88,7 @@ export async function assertMalwareScanClean(file: Express.Multer.File, hash: st
 }
 
 export async function reserveImport(hash: string, actorId: string, idempotencyKey: string): Promise<void> {
-  const db = getFirestore();
+  const db = auditFirestore();
   const ref = db.collection("importHashes").doc(hash);
   const requestId = crypto.createHash("sha256").update(`${actorId}:${idempotencyKey}`).digest("hex");
   const requestRef = db.collection("importRequests").doc(requestId);
@@ -101,5 +102,6 @@ export async function reserveImport(hash: string, actorId: string, idempotencyKe
 }
 
 export async function finishImport(hash: string, status: "completed" | "failed", rowCount = 0): Promise<void> {
-  await getFirestore().collection("importHashes").doc(hash).set({ status, rowCount, finishedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await auditFirestore().collection("importHashes").doc(hash)
+    .set({ status, rowCount, finishedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
