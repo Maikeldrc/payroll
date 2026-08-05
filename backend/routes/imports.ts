@@ -5,6 +5,7 @@ import { appendAuditEvent } from "../audit/auditService";
 import { reportingPeriod } from "../google/config";
 import { assertMalwareScanClean, finishImport, reserveImport, sha256 } from "../files/uploadService";
 import { issueAnalysisToken, verifyAnalysisToken } from "../imports/analysisToken";
+import { describeImportClientError } from "../imports/clientError";
 import { ImportBatchEngine } from "../imports/importBatchEngine";
 import { acquirePeriodLock, releasePeriodLock } from "../imports/periodLockService";
 import { MonthlyProcessingService } from "../monthly/monthlyProcessingService";
@@ -46,7 +47,12 @@ importsRouter.post("/imports/analyze", authorize("import:create"), requireImport
     await appendAuditEvent({ principal: res.locals.principal, action: "import.analyzed", resourceType: "monthly-record-import", resourceId: fileHash, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `malware-scan:${scanStatus}` });
     res.json({ analysis, analysisToken: issueAnalysisToken(fileHash, period, res.locals.principal.uid), expiresInSeconds: 900, uploadSecurity: { malwareScan: scanStatus } });
   } catch (error) {
-    await appendAuditEvent({ principal: res.locals.principal, action: "import.analysis_failed", resourceType: "monthly-record-import", resourceId: "unidentified", result: "failed", source: "backend", correlationId: res.locals.correlationId, reason: error instanceof Error ? error.name : "UnknownError" }).catch(() => undefined);
+    const clientError = describeImportClientError(error);
+    await appendAuditEvent({ principal: res.locals.principal, action: "import.analysis_failed", resourceType: "monthly-record-import", resourceId: "unidentified", result: "failed", source: "backend", correlationId: res.locals.correlationId, reason: clientError?.reason || (error instanceof Error ? error.name : "UnknownError") }).catch(() => undefined);
+    if (clientError) {
+      console.warn(JSON.stringify({ event: "import.validation_failed", reason: clientError.reason, correlationId: res.locals.correlationId }));
+      return res.status(422).json({ error: "import_validation_failed", ...clientError });
+    }
     next(error);
   } finally {
     if (req.file) req.file.buffer.fill(0);
@@ -75,9 +81,14 @@ importsRouter.post("/imports/confirm", authorize("import:create"), requireImport
     await appendAuditEvent({ principal: res.locals.principal, action: "import.completed", resourceType: "monthly-record-import", resourceId: result.importBatchId, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `malware-scan:${scanStatus}` });
     res.status(201).json({ reportingPeriod: period, ...result, uploadSecurity: { malwareScan: scanStatus } });
   } catch (error) {
+    const clientError = describeImportClientError(error);
     if (reservation) await finishImport(reservation, "failed").catch(() => undefined);
     if (lock) await releasePeriodLock(lock, "Failed").catch(() => undefined);
-    await appendAuditEvent({ principal: res.locals.principal, action: "import.failed", resourceType: "monthly-record-import", resourceId: reservation || "unidentified", result: "failed", source: "backend", correlationId: res.locals.correlationId, reason: error instanceof Error ? error.name : "UnknownError" }).catch(() => undefined);
+    await appendAuditEvent({ principal: res.locals.principal, action: "import.failed", resourceType: "monthly-record-import", resourceId: reservation || "unidentified", result: "failed", source: "backend", correlationId: res.locals.correlationId, reason: clientError?.reason || (error instanceof Error ? error.name : "UnknownError") }).catch(() => undefined);
+    if (clientError) {
+      console.warn(JSON.stringify({ event: "import.validation_failed", reason: clientError.reason, correlationId: res.locals.correlationId }));
+      return res.status(422).json({ error: "import_validation_failed", ...clientError });
+    }
     next(error);
   } finally {
     if (req.file) req.file.buffer.fill(0);

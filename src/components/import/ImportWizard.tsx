@@ -46,8 +46,8 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
     setBusy(true); setError(null); setResult(null);
     try {
       const response = await apiFetch("/api/imports/analyze", { method: "POST", body: formForFile() });
-      const body = await response.json() as { analysis?: Analysis; analysisToken?: string; error?: string; uploadSecurity?: { malwareScan?: "clean" | "temporarily_bypassed" } };
-      if (!response.ok || !body.analysis || !body.analysisToken) throw new Error(body.error || "analysis_failed");
+      const body = await response.json() as { analysis?: Analysis; analysisToken?: string; error?: string; message?: string; uploadSecurity?: { malwareScan?: "clean" | "temporarily_bypassed" } };
+      if (!response.ok || !body.analysis || !body.analysisToken) throw new Error(body.message || body.error || "analysis_failed");
       setAnalysis(body.analysis); setAnalysisToken(body.analysisToken); setScanStatus(body.uploadSecurity?.malwareScan || null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "analysis_failed");
@@ -61,8 +61,8 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
       const form = formForFile();
       form.set("analysisToken", analysisToken);
       const response = await apiFetch("/api/imports/confirm", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: form });
-      const body = await response.json() as { rowsImported?: number; exactDuplicates?: number; reviewRows?: number; importBatchId?: string; error?: string };
-      if (!response.ok || !body.importBatchId) throw new Error(body.error || "import_failed");
+      const body = await response.json() as { rowsImported?: number; exactDuplicates?: number; reviewRows?: number; importBatchId?: string; error?: string; message?: string };
+      if (!response.ok || !body.importBatchId) throw new Error(body.message || body.error || "import_failed");
       setResult({ rowsImported: body.rowsImported || 0, exactDuplicates: body.exactDuplicates || 0, reviewRows: body.reviewRows || 0, importBatchId: body.importBatchId });
       onComplete?.();
     } catch (cause) {

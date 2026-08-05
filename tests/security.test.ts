@@ -7,6 +7,7 @@ import type { MonthlyRecordRow } from "../backend/data/types";
 import { assertMalwareScanClean, parseUpload } from "../backend/files/uploadService";
 import { PERMISSIONS, ROLE_NAMES, ROLE_PERMISSIONS, roleHasPermission, type Permission, type RoleName } from "../shared/authorization";
 import { validateProductionConfiguration } from "../backend/config/production";
+import { describeImportClientError } from "../backend/imports/clientError";
 
 process.env.NODE_ENV = "test";
 process.env.ALLOWED_ORIGINS = "https://app.itera.health";
@@ -114,6 +115,14 @@ test("unscanned production imports require an explicit temporary bypass", async 
   } finally {
     process.env = previous;
   }
+});
+
+test("import validation exposes only reviewed client-safe errors", () => {
+  assert.deepEqual(describeImportClientError(new Error("Formula, hyperlink or rich content rejected in Patient row 2")), {
+    reason: "unsafe_spreadsheet_content",
+    message: "El archivo contiene fórmulas, hipervínculos o contenido enriquecido no permitido. Convierta esas celdas a valores antes de importarlo.",
+  });
+  assert.equal(describeImportClientError(new Error("Permission denied by Google Sheets")), null);
 });
 
 test("role matrix keeps executive and provider viewers away from privileged operations", () => {
