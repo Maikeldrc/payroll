@@ -31,6 +31,18 @@ steps:
       - --memory=1Gi
       - --timeout=60s
 
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - beta
+      - run
+      - services
+      - update
+      - ${_SERVICE}
+      - --region=${_REGION}
+      - --default-url
+      - --quiet
+
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${BUILD_ID}
 
