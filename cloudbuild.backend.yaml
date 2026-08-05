@@ -2,7 +2,7 @@ substitutions:
   _REGION: us-central1
   _SERVICE: itera-care-backend
   _REPOSITORY: itera
-  _ALLOWED_ORIGIN: https://app.itera.health
+  _ALLOWED_ORIGIN: https://itera-payroll.vercel.app
   _AUDIT_DATABASE: itera-audit
 
 steps:

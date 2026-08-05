@@ -25,7 +25,7 @@ export function validateProductionConfiguration(): void {
     throw new Error("Production DATA_STORE must be google-sheets-monthly");
   }
   for (const name of ["GOOGLE_SHARED_DRIVE_ID", "GOOGLE_ROOT_FOLDER_ID", "GOOGLE_MONTHLY_FOLDER_ID", "GOOGLE_MASTER_FOLDER_ID", "GOOGLE_MASTER_SPREADSHEET_ID"] as const) {
-    if (!GOOGLE_ID_PATTERN.test(process.env[name]!)) throw new Error(`${name} is invalid`);
+    if (!GOOGLE_ID_PATTERN.test(process.env[name]!.trim())) throw new Error(`${name} is invalid`);
   }
   if (process.env.IMPORTS_ENABLED === "true" && !process.env.MALWARE_SCANNER_URL?.startsWith("https://")) {
     throw new Error("Enabled production imports require an HTTPS malware scanner");

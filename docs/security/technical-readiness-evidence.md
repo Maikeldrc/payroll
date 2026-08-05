@@ -23,7 +23,7 @@ Status date: 2026-08-04. This is engineering evidence, not a HIPAA compliance de
 
 - Shared Drive/folder/Master IDs have not been supplied; live structure and ACL validation cannot run.
 - Imports are intentionally disabled because no approved malware scanner is configured.
-- The dedicated backend service account still requires explicit approval for the least-privilege Firebase Auth read capability used for revoked/disabled-user checks.
+- The dedicated backend service account has the approved least-privilege Firebase Auth Viewer capability used for revoked/disabled-user checks.
 - Secret Manager values and secret-version IAM have not been completed.
 - Environment-bound integration, concurrency, recovery, audit-log export, retention, alerting, and operational owner evidence remain pending.
 - Google Sheets has transaction/concurrency/cell-limit constraints. The implementation mitigates them with monthly partitioning, logical locks, idempotency, batch states, duplicate checks, versioning, capacity alerts, and close controls, but operational monitoring and recovery drills remain mandatory.
