@@ -3,6 +3,7 @@ import { KeyRound, LockKeyhole, LogIn, ShieldCheck } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "../../context/AuthContext";
 import type { TotpEnrollmentChallenge } from "../../lib/firebase";
+import iteraHealthLogo from "../../assets/itera-health-logo.webp";
 
 export const LoginScreen: React.FC = () => {
   const {
@@ -94,11 +95,16 @@ export const LoginScreen: React.FC = () => {
   return (
     <main className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
       <section className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl" aria-labelledby="login-title">
-        <div className="flex items-center gap-3 mb-7">
-          <div className="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center"><ShieldCheck className="text-white" /></div>
-          <div>
-            <h1 id="login-title" className="text-xl font-bold text-white">ITERA Care</h1>
-            <p className="text-sm text-slate-400">Acceso autorizado solamente</p>
+        <div className="mb-7">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <img src={iteraHealthLogo} alt="ITERA Health" className="h-14 w-auto max-w-full object-contain object-left" />
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600"><ShieldCheck className="text-white" /></div>
+            <div>
+              <h1 id="login-title" className="text-lg font-bold text-white">Care Management Analytics & Payroll</h1>
+              <p className="text-sm text-slate-400">Acceso autorizado solamente</p>
+            </div>
           </div>
         </div>
 
