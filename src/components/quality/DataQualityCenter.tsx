@@ -18,6 +18,7 @@ import { MonthlyManagementRecord } from "../../types";
 export const DataQualityCenter: React.FC<{ onOpenPatient: (record: any) => void }> = ({
   onOpenPatient,
 }) => {
+  const demoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const {
     records,
     resolveValidationError,
@@ -92,14 +93,14 @@ export const DataQualityCenter: React.FC<{ onOpenPatient: (record: any) => void 
           >
             Duplicados ({duplicateRecords.length})
           </button>
-          <button
+          {demoMode && <button
             onClick={() => setActiveTab("aliases")}
             className={`px-3 py-1.5 rounded-lg transition-all ${
               activeTab === "aliases" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
             }`}
           >
             Alias Ortográficos
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -176,18 +177,18 @@ export const DataQualityCenter: React.FC<{ onOpenPatient: (record: any) => void 
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {!err.resolved ? (
+                            {!err.resolved && demoMode ? (
                               <button
                                 onClick={() => handleResolve(r.id, err.id)}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold text-[11px]"
                               >
                                 Resolver
                               </button>
-                            ) : (
+                            ) : err.resolved ? (
                               <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
                                 <Check className="w-3.5 h-3.5" /> Resuelto
                               </span>
-                            )}
+                            ) : <span className="text-[11px] font-semibold text-slate-500">Revisión backend</span>}
                             <button
                               onClick={() => onOpenPatient(r)}
                               className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded font-semibold text-[11px]"
@@ -218,12 +219,12 @@ export const DataQualityCenter: React.FC<{ onOpenPatient: (record: any) => void 
                   <p className="text-[11px] text-slate-500 mt-0.5">Care Manager: {r.careManagerName} • Facturación: ${r.monthlyBilling}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  {demoMode && <button
                     onClick={() => toggleRecordPayrollStatus(r.id, "Excluded", "Duplicado confirmado")}
                     className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-[11px]"
                   >
                     Excluir de Payroll
-                  </button>
+                  </button>}
                   <button
                     onClick={() => onOpenPatient(r)}
                     className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-[11px]"
@@ -237,7 +238,7 @@ export const DataQualityCenter: React.FC<{ onOpenPatient: (record: any) => void 
         </div>
       )}
 
-      {activeTab === "aliases" && (
+      {demoMode && activeTab === "aliases" && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
           <h3 className="font-bold text-slate-900 text-sm">Mapeo de Alias Ortográficos de Care Managers</h3>
           <p className="text-slate-500">Vincule nombres abreviados o variaciones tipográficas en los archivos Excel al perfil oficial del Care Manager.</p>

@@ -7,8 +7,6 @@ import { Sidebar, NavTab } from "./components/layout/Sidebar";
 import { GlobalFiltersBar } from "./components/layout/GlobalFiltersBar";
 import { ExecutiveDashboard } from "./components/dashboard/ExecutiveDashboard";
 import { SecureExecutiveSummary } from "./components/dashboard/SecureExecutiveSummary";
-import { SecurePatientRecords } from "./components/patient/SecurePatientRecords";
-import { SecurePayrollSummary } from "./components/payroll/SecurePayrollSummary";
 import { roleHasPermission } from "../shared/authorization";
 import { PerformancePayrollModule } from "./components/performance/PerformancePayrollModule";
 import { CareManagerPerformance } from "./components/caremanager/CareManagerPerformance";
@@ -33,6 +31,8 @@ const MainContent: React.FC = () => {
   // Modals & Drawers state
   const [selectedPatient, setSelectedPatient] = useState<MonthlyManagementRecord | null>(null);
   const [selectedCareManager, setSelectedCareManager] = useState<CareManager | null>(null);
+  const canViewPatientData = Boolean(claims && roleHasPermission(claims.role, "patient:view"));
+  const canViewOperationalPerformance = Boolean(claims && canViewPatientData && roleHasPermission(claims.role, "performance:view"));
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 antialiased selection:bg-indigo-500 selection:text-white">
@@ -55,17 +55,13 @@ const MainContent: React.FC = () => {
           <GlobalFiltersBar activeTab={activeTab} />
 
           <div className="p-4 sm:p-6 max-w-[1700px] w-full mx-auto flex-1">
-            {activeTab === "performance-payroll" && demoMode && <PerformancePayrollModule />}
-            {activeTab === "performance-payroll" && !demoMode && claims && (
-              roleHasPermission(claims.role, "patient:view") ? <SecurePatientRecords />
-                : roleHasPermission(claims.role, "dashboard:view") ? <SecureExecutiveSummary />
-                : <SecurePayrollSummary />
-            )}
+            {activeTab === "performance-payroll" && (demoMode || canViewPatientData) && <PerformancePayrollModule />}
+            {activeTab === "performance-payroll" && !demoMode && !canViewPatientData && <SecureExecutiveSummary />}
 
-            {activeTab === "dashboard" && !demoMode && <SecureExecutiveSummary />}
+            {activeTab === "dashboard" && !demoMode && !canViewOperationalPerformance && <SecureExecutiveSummary />}
             {activeTab === "dashboard" && demoMode && claims?.role === "Executive Viewer" && <SecureExecutiveSummary />}
 
-            {activeTab === "dashboard" && demoMode && claims?.role !== "Executive Viewer" && (
+            {activeTab === "dashboard" && (canViewOperationalPerformance || (demoMode && claims?.role !== "Executive Viewer")) && (
               <ExecutiveDashboard
                 onOpenPatient={(rec) => setSelectedPatient(rec)}
                 onOpenCareManager={(cm) => setSelectedCareManager(cm)}
@@ -73,25 +69,28 @@ const MainContent: React.FC = () => {
               />
             )}
 
-            {activeTab === "care-managers" && !demoMode && <SecurePatientRecords />}
-            {activeTab === "care-managers" && demoMode && (
+            {activeTab === "care-managers" && (demoMode || canViewPatientData) && (
               <CareManagerPerformance
                 onOpenCareManager={(cm) => setSelectedCareManager(cm)}
               />
             )}
 
-            {activeTab === "payroll" && (demoMode ? <PayrollCenter /> : <SecurePayrollSummary />)}
+            {activeTab === "care-managers" && !demoMode && !canViewPatientData && <SecureExecutiveSummary />}
 
-            {activeTab === "providers" && (demoMode ? <ProviderPerformanceView /> : <SecurePatientRecords />)}
+            {activeTab === "payroll" && <PayrollCenter />}
 
-            {activeTab === "services" && (demoMode ? <ServiceAnalyticsView /> : <SecurePatientRecords />)}
+            {activeTab === "providers" && (demoMode || canViewPatientData) && <ProviderPerformanceView />}
+            {activeTab === "providers" && !demoMode && !canViewPatientData && <SecureExecutiveSummary />}
 
-            {activeTab === "quality" && !demoMode && <SecurePatientRecords />}
-            {activeTab === "quality" && demoMode && (
+            {activeTab === "services" && (demoMode || canViewPatientData) && <ServiceAnalyticsView />}
+            {activeTab === "services" && !demoMode && !canViewPatientData && <SecureExecutiveSummary />}
+
+            {activeTab === "quality" && (demoMode || canViewPatientData) && (
               <DataQualityCenter
                 onOpenPatient={(rec) => setSelectedPatient(rec)}
               />
             )}
+            {activeTab === "quality" && !demoMode && !canViewPatientData && <SecureExecutiveSummary />}
 
             {activeTab === "import" && <ImportWizard onComplete={() => setActiveTab("dashboard")} />}
 

@@ -131,11 +131,11 @@ export const AppProvider: React.FC<{
 }> = ({ children, authenticatedRole, authenticatedActor }) => {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const [records, setRecords] = useState<MonthlyManagementRecord[]>(() => demoMode ? generateSyntheticRecords() : []);
-  const [importBatches, setImportBatches] = useState<ImportBatch[]>(INITIAL_IMPORT_BATCHES);
-  const [payrollRules, setPayrollRules] = useState<PayrollRule[]>(INITIAL_PAYROLL_RULES);
-  const [providers, setProviders] = useState<Provider[]>(INITIAL_PROVIDERS);
-  const [careManagers, setCareManagers] = useState<CareManager[]>(INITIAL_CARE_MANAGERS);
-  const [practices, setPractices] = useState<Practice[]>(INITIAL_PRACTICES);
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>(() => demoMode ? INITIAL_IMPORT_BATCHES : []);
+  const [payrollRules, setPayrollRules] = useState<PayrollRule[]>(() => demoMode ? INITIAL_PAYROLL_RULES : []);
+  const [providers, setProviders] = useState<Provider[]>(() => demoMode ? INITIAL_PROVIDERS : []);
+  const [careManagers, setCareManagers] = useState<CareManager[]>(() => demoMode ? INITIAL_CARE_MANAGERS : []);
+  const [practices, setPractices] = useState<Practice[]>(() => demoMode ? INITIAL_PRACTICES : []);
   const [services, setServices] = useState<ServiceCatalogItem[]>(INITIAL_SERVICES);
   const [cptCodes] = useState<CPTCode[]>(INITIAL_CPT_CODES);
   const [icd10Codes] = useState<ICD10Code[]>(INITIAL_ICD10_CODES);
@@ -148,6 +148,7 @@ export const AppProvider: React.FC<{
   const [serviceConfigs, setServiceConfigs] = useState<ServiceConfigDefinition[]>(INITIAL_SERVICE_CONFIGS);
   const [extendedCPTCodes, setExtendedCPTCodes] = useState<ExtendedCPTCode[]>(INITIAL_EXTENDED_CPT_REGISTRY);
   const [payrollCalculations, setPayrollCalculations] = useState<PayrollCalculation[]>([]);
+  const [backendDataRevision, setBackendDataRevision] = useState(0);
 
   useEffect(() => {
     if (demoMode) return;
@@ -156,25 +157,66 @@ export const AppProvider: React.FC<{
       return;
     }
     let active = true;
-    const month = encodeURIComponent(globalFilters.monthOf || "");
-    void apiFetch(`/api/patients?monthOf=${month}`).then(async (response) => {
+    const months = [...new Set([globalFilters.monthOf, ...globalFilters.monthRange].filter(Boolean))];
+    void Promise.all(months.map(async (reportingPeriod) => {
+      const response = await apiFetch(`/api/patients?monthOf=${encodeURIComponent(reportingPeriod)}`);
       if (!response.ok) throw new Error("patient_data_denied");
-      const payload = await response.json() as { records?: Array<Record<string, unknown>> };
+      return response.json() as Promise<{ monthOf: string; records?: Array<Record<string, unknown>> }>;
+    })).then((payloads) => {
       if (!active) return;
-      const mapped: MonthlyManagementRecord[] = (payload.records || []).map((record) => ({
+      const mapped: MonthlyManagementRecord[] = payloads.flatMap((payload) => (payload.records || []).map((record) => {
+        const validationStatus = String(record.validationStatus || "Valid");
+        const duplicateStatus = String(record.duplicateStatus || "New");
+        const payrollStatus = String(record.payrollStatus || "Pending Review");
+        const validationErrors: ValidationError[] = validationStatus === "Valid" ? [] : [{
+          id: `${String(record.id || "record")}:validation`, recordId: String(record.id || ""), rowNumber: 0,
+          field: "Validation Status", value: validationStatus,
+          severity: validationStatus === "Rejected" ? "Critical Error" : "Warning",
+          message: `El backend marcó el registro como ${validationStatus}.`, resolved: false,
+        }];
+        return ({
         id: String(record.id || ""), batchId: "backend", mrn: String(record.mrn || ""), patientName: String(record.patientName || ""),
         firstName: "", lastName: "", sex: "Other", dob: "", providerId: String(record.providerId || ""), providerName: String(record.providerName || ""),
         careManagerId: String(record.careManagerId || ""), careManagerName: String(record.careManagerName || ""), practiceId: String(record.practiceId || ""), practiceName: "",
         serviceId: String(record.serviceCode || ""), serviceCode: String(record.serviceCode || ""), conditions: record.diagnosisSummary ? [String(record.diagnosisSummary)] : [],
-        icd10s: [], codes: [], monthOf: globalFilters.monthOf, logEntries: 0, monthlyBilling: Number(record.monthlyBilling || 0), lastModificationTime: "",
-        latestInteractiveCommunication: "", primaryInsuranceName: String(record.insuranceName || ""), primaryPolicyNumber: "", secondaryInsuranceName: "",
+        icd10s: [], codes: Array.isArray(record.codes) ? record.codes.map(String) : [], monthOf: payload.monthOf, logEntries: Number(record.logEntries || 0), monthlyBilling: Number(record.monthlyBilling || 0), lastModificationTime: "",
+        latestInteractiveCommunication: String(record.latestInteractiveCommunication || ""), primaryInsuranceName: String(record.insuranceName || ""), primaryPolicyNumber: "", secondaryInsuranceName: "",
         secondaryPolicyNumber: "", address: "", eligibility: ["Eligible", "Ineligible", "Pending", "Terminated"].includes(String(record.eligibility)) ? record.eligibility as MonthlyManagementRecord["eligibility"] : "Pending",
-        hmo: "No", payrollStatus: "Pending Review", payrollExclusionReason: "", qualityScore: 0, validationErrors: [], isDuplicate: false, manualOverride: false,
-      }));
+        hmo: record.hmo === "Yes" ? "Yes" : "No",
+        payrollStatus: ["Included", "Excluded", "Pending Review", "Manual Exception"].includes(payrollStatus) ? payrollStatus as MonthlyManagementRecord["payrollStatus"] : "Pending Review",
+        payrollExclusionReason: "", qualityScore: record.dataQualityStatus === "Clean" ? 100 : 70, validationErrors,
+        isDuplicate: duplicateStatus !== "New", duplicateDetails: duplicateStatus !== "New" ? duplicateStatus : undefined, manualOverride: false,
+      });}));
       setRecords(mapped);
-    }).catch(() => { if (active) setRecords([]); });
+      const managerMap = new Map<string, CareManager>();
+      const providerMap = new Map<string, Provider>();
+      const practiceMap = new Map<string, Practice>();
+      mapped.forEach((record) => {
+        if (record.careManagerId && !managerMap.has(record.careManagerId)) managerMap.set(record.careManagerId, {
+          id: record.careManagerId, name: record.careManagerName || record.careManagerId, email: "", role: "Care Manager",
+          practiceIds: record.practiceId ? [record.practiceId] : [], providerIds: record.providerId ? [record.providerId] : [],
+          serviceCodes: record.serviceCode ? [record.serviceCode] : [], status: "Active", aliases: [],
+        });
+        if (record.providerId && !providerMap.has(record.providerId)) providerMap.set(record.providerId, {
+          id: record.providerId, practiceId: record.practiceId, name: record.providerName || record.providerId, aliases: [], status: "Active",
+        });
+        if (record.practiceId && !practiceMap.has(record.practiceId)) practiceMap.set(record.practiceId, {
+          id: record.practiceId, organizationId: "ORG-001", name: record.practiceName || record.practiceId,
+          code: record.practiceId, status: "Active",
+        });
+      });
+      setCareManagers([...managerMap.values()]);
+      setProviders([...providerMap.values()]);
+      setPractices([...practiceMap.values()]);
+    }).catch(() => {
+      if (!active) return;
+      setRecords([]);
+      setCareManagers([]);
+      setProviders([]);
+      setPractices([]);
+    });
     return () => { active = false; };
-  }, [currentUserRole, demoMode, globalFilters.monthOf]);
+  }, [currentUserRole, demoMode, globalFilters.monthOf, globalFilters.monthRange]);
 
   const updateServiceConfig = (updated: ServiceConfigDefinition) => {
     setServiceConfigs((prev) => prev.map((sc) => (sc.id === updated.id ? updated : sc)));
@@ -193,25 +235,50 @@ export const AppProvider: React.FC<{
     addAuditLog("Update CPT Registry Code", "ExtendedCPTCode", updated.code, `Actualizado CPT ${updated.code} en catálogo`);
   };
 
-  // Automatically compute payroll calculations for active Care Managers & Month Of
+  // Load authorized payroll in production; use the local engine only in explicit demo mode.
   useEffect(() => {
-    if (!demoMode) {
-      setPayrollCalculations([]);
-      return;
-    }
     if (!roleHasPermission(currentUserRole, "payroll:view")) {
       setPayrollCalculations([]);
       return;
     }
-    const month = globalFilters.monthOf || "2026-07";
-    const calcs = careManagers.map((cm) => {
-      const existing = payrollCalculations.find(
-        (c) => c.careManagerId === cm.id && c.monthOf === month
-      );
-      return calculatePayrollForCareManager(cm, records, payrollRules, month, existing);
-    });
-    setPayrollCalculations(calcs);
-  }, [records, payrollRules, careManagers, currentUserRole, demoMode, globalFilters.monthOf]);
+    if (demoMode) {
+      const month = globalFilters.monthOf || "2026-07";
+      const calcs = careManagers.map((cm) => {
+        const existing = payrollCalculations.find((c) => c.careManagerId === cm.id && c.monthOf === month);
+        return calculatePayrollForCareManager(cm, records, payrollRules, month, existing);
+      });
+      setPayrollCalculations(calcs);
+      return;
+    }
+    let active = true;
+    const months = [...new Set([globalFilters.monthOf, ...globalFilters.monthRange].filter(Boolean))];
+    void Promise.all(months.map(async (monthOf) => {
+      const response = await apiFetch(`/api/payroll?monthOf=${encodeURIComponent(monthOf)}`);
+      if (!response.ok) throw new Error("payroll_data_denied");
+      return response.json() as Promise<{ rows?: Array<Record<string, unknown>> }>;
+    })).then((payloads) => {
+      if (!active) return;
+      const allowedStatuses: PayrollCalculation["status"][] = ["Draft", "Data Validation", "Manager Review", "Adjustments Required", "Ready for Approval", "Approved", "Closed", "Exported"];
+      const rows = payloads.flatMap((payload) => payload.rows || []).map((row): PayrollCalculation => {
+        const monthOf = String(row.monthOf || globalFilters.monthOf);
+        const careManagerId = String(row.careManagerId || "");
+        const managedPatientsCount = records.filter((record) => record.monthOf === monthOf && record.careManagerId === careManagerId).length;
+        const rawStatus = String(row.status || "Draft") as PayrollCalculation["status"];
+        const baseEarnings = Number(row.baseEarnings || 0);
+        const bonuses = Number(row.bonuses || 0);
+        const deductions = Number(row.deductions || 0);
+        return {
+          id: String(row.id || `${monthOf}:${careManagerId}`), careManagerId, careManagerName: String(row.careManagerName || careManagerId), monthOf,
+          status: allowedStatuses.includes(rawStatus) ? rawStatus : "Draft", version: Number(row.calculationVersion || 1),
+          managedPatientsCount, eligiblePatientsCount: managedPatientsCount, excludedPatientsCount: 0,
+          baseEarnings, bonuses, deductions, manualAdjustments: [], grossPay: baseEarnings + bonuses,
+          netPay: Number(row.netPay || 0), breakdownLines: [], history: [],
+        };
+      });
+      setPayrollCalculations(rows);
+    }).catch(() => { if (active) setPayrollCalculations([]); });
+    return () => { active = false; };
+  }, [records, payrollRules, careManagers, currentUserRole, demoMode, globalFilters.monthOf, globalFilters.monthRange, backendDataRevision]);
 
   const addAuditLog = (action: string, entityType: string, entityId: string, details: string) => {
     const newEntry: AuditLogEntry = {
@@ -239,6 +306,7 @@ export const AppProvider: React.FC<{
   };
 
   const resolveValidationError = (recordId: string, errorId: string, note?: string) => {
+    if (!demoMode) return;
     setRecords((prev) =>
       prev.map((r) => {
         if (r.id !== recordId) return r;
@@ -252,6 +320,7 @@ export const AppProvider: React.FC<{
   };
 
   const toggleRecordPayrollStatus = (recordId: string, newStatus: PayrollStatus, reason?: string) => {
+    if (!demoMode) return;
     setRecords((prev) =>
       prev.map((r) => {
         if (r.id !== recordId) return r;
@@ -267,6 +336,16 @@ export const AppProvider: React.FC<{
   };
 
   const recalculateAllPayroll = (monthOf: string) => {
+    if (!demoMode) {
+      void apiFetch("/api/reporting-periods/recalculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportingPeriod: monthOf }),
+      }).then((response) => {
+        if (response.ok) setBackendDataRevision((revision) => revision + 1);
+      });
+      return;
+    }
     const calcs = careManagers.map((cm) => {
       const existing = payrollCalculations.find((c) => c.careManagerId === cm.id && c.monthOf === monthOf);
       return calculatePayrollForCareManager(cm, records, payrollRules, monthOf, existing);
@@ -291,6 +370,7 @@ export const AppProvider: React.FC<{
   };
 
   const addManualPayrollAdjustment = (calcId: string, adjustment: Omit<ManualAdjustment, "id" | "timestamp">) => {
+    if (!demoMode) return;
     const adjObj: ManualAdjustment = {
       ...adjustment,
       id: `ADJ-${Date.now()}`,
@@ -315,6 +395,7 @@ export const AppProvider: React.FC<{
   };
 
   const updatePayrollStatus = (calcId: string, newStatus: PayrollCalculation["status"]) => {
+    if (!demoMode) return;
     setPayrollCalculations((prev) =>
       prev.map((c) => {
         if (c.id !== calcId) return c;
@@ -355,6 +436,7 @@ export const AppProvider: React.FC<{
   };
 
   const addAliasToCareManager = (cmId: string, alias: string) => {
+    if (!demoMode) return;
     setCareManagers((prev) =>
       prev.map((cm) => (cm.id === cmId ? { ...cm, aliases: [...new Set([...cm.aliases, alias])] } : cm))
     );
@@ -362,6 +444,7 @@ export const AppProvider: React.FC<{
   };
 
   const addAliasToProvider = (provId: string, alias: string) => {
+    if (!demoMode) return;
     setProviders((prev) =>
       prev.map((p) => (p.id === provId ? { ...p, aliases: [...new Set([...p.aliases, alias])] } : p))
     );

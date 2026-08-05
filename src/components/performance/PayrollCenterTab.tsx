@@ -4,6 +4,7 @@ import { useApp } from "../../context/AppContext";
 import { PayrollCalculation } from "../../types";
 
 export const PayrollCenterTab: React.FC<{ onDrillDownExceptions: () => void }> = ({ onDrillDownExceptions }) => {
+  const demoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const { payrollCalculations, records, addAuditLog, globalFilters } = useApp();
   const [selectedCMForAdjustment, setSelectedCMForAdjustment] = useState<PayrollCalculation | null>(null);
   const [adjAmount, setAdjAmount] = useState<string>("");
@@ -85,7 +86,11 @@ export const PayrollCenterTab: React.FC<{ onDrillDownExceptions: () => void }> =
 
         {/* Action Button: Approve Payroll */}
         <div>
-          {isBlockedForApproval ? (
+          {!demoMode ? (
+            <span className="px-5 py-2.5 bg-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Aprobación gestionada por workflow backend
+            </span>
+          ) : isBlockedForApproval ? (
             <button
               onClick={onDrillDownExceptions}
               className="px-5 py-2.5 bg-rose-600/90 hover:bg-rose-600 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md"
@@ -194,13 +199,13 @@ export const PayrollCenterTab: React.FC<{ onDrillDownExceptions: () => void }> =
                       ${c.netPay.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-3 text-center">
-                      <button
+                      {demoMode ? <button
                         onClick={() => setSelectedCMForAdjustment(c)}
                         className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold text-[11px] border border-slate-300 flex items-center gap-1 mx-auto"
                       >
                         <Edit3 className="w-3 h-3 text-indigo-600" />
                         <span>Ajuste Manual</span>
-                      </button>
+                      </button> : <span className="text-[10px] font-semibold text-slate-500">Solo lectura</span>}
                     </td>
                   </tr>
                 );
@@ -211,7 +216,7 @@ export const PayrollCenterTab: React.FC<{ onDrillDownExceptions: () => void }> =
       </div>
 
       {/* Manual Adjustment Modal */}
-      {selectedCMForAdjustment && (
+      {demoMode && selectedCMForAdjustment && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <h4 className="font-bold text-slate-900 text-base">

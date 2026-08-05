@@ -16,10 +16,15 @@ import {
   Check,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { useAuth } from "../../context/AuthContext";
+import { roleHasPermission } from "../../../shared/authorization";
 import { PayrollCalculation, ManualAdjustment } from "../../types";
 import { PayrollRuleBuilder } from "./PayrollRuleBuilder";
 
 export const PayrollCenter: React.FC = () => {
+  const demoMode = import.meta.env.VITE_DEMO_MODE === "true";
+  const { claims } = useAuth();
+  const canManagePayroll = Boolean(claims && roleHasPermission(claims.role, "payroll:manage"));
   const {
     payrollCalculations,
     careManagers,
@@ -86,23 +91,23 @@ export const PayrollCenter: React.FC = () => {
             >
               Cálculo Mensual ({monthCalcs.length})
             </button>
-            <button
+            {demoMode ? <button
               onClick={() => setActiveTab("rules")}
               className={`px-3 py-1.5 rounded-lg transition-all ${
                 activeTab === "rules" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Reglas Configurables
-            </button>
+            </button> : <span className="px-3 py-1.5 text-slate-500">Reglas administradas en backend</span>}
           </div>
 
-          <button
+          {canManagePayroll && <button
             onClick={() => recalculateAllPayroll(currentMonth)}
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Recalcular Todo</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -193,6 +198,7 @@ export const PayrollCenter: React.FC = () => {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {demoMode ? <>
                             <button
                               onClick={() => {
                                 setSelectedCalc(calc);
@@ -226,6 +232,7 @@ export const PayrollCenter: React.FC = () => {
                                 Cerrar
                               </button>
                             )}
+                            </> : <span className="text-[10px] font-semibold text-slate-500">Workflow backend</span>}
                           </div>
                         </td>
                       </tr>
@@ -238,10 +245,10 @@ export const PayrollCenter: React.FC = () => {
         </>
       )}
 
-      {activeTab === "rules" && <PayrollRuleBuilder />}
+      {demoMode && activeTab === "rules" && <PayrollRuleBuilder />}
 
       {/* Manual Adjustment Modal Drawer */}
-      {showAdjModal && selectedCalc && (
+      {demoMode && showAdjModal && selectedCalc && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
             <h3 className="font-bold text-slate-900 text-base border-b border-slate-200 pb-2">

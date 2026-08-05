@@ -16,6 +16,13 @@ export interface MonthlyRecordRow {
   insuranceName: string;
   diagnosisSummary: string;
   payrollStatus: string;
+  logEntries?: number;
+  latestInteractiveCommunication?: string;
+  hmo?: string;
+  codes?: string[];
+  validationStatus?: string;
+  dataQualityStatus?: string;
+  duplicateStatus?: string;
 }
 
 export interface PayrollRow {

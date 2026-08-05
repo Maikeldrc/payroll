@@ -14,7 +14,7 @@ interface ExecutiveSummaryTabProps {
 }
 
 export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ onDrillDown, onOpenMetricDictionary }) => {
-  const { records, payrollCalculations, globalFilters, serviceConfigs } = useApp();
+  const { records, payrollCalculations, careManagers, globalFilters, serviceConfigs } = useApp();
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   const currentMonth = globalFilters.monthOf || "2026-07";
@@ -80,15 +80,15 @@ export const ExecutiveSummaryTab: React.FC<ExecutiveSummaryTabProps> = ({ onDril
   // Productivity
   const totalDocHours = Number((filteredRecords.reduce((acc, r) => acc + r.logEntries * 0.4, 0)).toFixed(1));
   const adjDocHours = Number((totalDocHours * 1.20).toFixed(1));
-  const totalDeclaredHours = 1760; // 11 Care Managers * 160h
-  const teamUtilization = Math.round((adjDocHours / totalDeclaredHours) * 100);
+  const totalDeclaredHours = careManagers.length * 160;
+  const teamUtilization = totalDeclaredHours > 0 ? Math.round((adjDocHours / totalDeclaredHours) * 100) : 0;
 
   // Revenue & Payroll
   const directRevenue = filteredRecords.reduce((acc, r) => acc + r.monthlyBilling, 0);
   const totalAttributedRevenue = directRevenue * 1.28; // Direct + 28% attributed value
-  const finalPayroll = payrollCalculations.length > 0
-    ? payrollCalculations.reduce((acc, c) => acc + c.netPay, 0)
-    : 24750;
+  const finalPayroll = payrollCalculations
+    .filter((calculation) => calculation.monthOf === currentMonth)
+    .reduce((acc, calculation) => acc + calculation.netPay, 0);
   const payrollPercentOfRevenue = directRevenue > 0 ? (finalPayroll / directRevenue) * 100 : 0;
   const revenueAfterPayroll = totalAttributedRevenue - finalPayroll;
 

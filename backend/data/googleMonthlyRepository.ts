@@ -27,6 +27,9 @@ export async function readGoogleMonthlyRecords(reportingPeriod: string, principa
     careManagerId: row["Care Manager Normalized ID"], careManagerName: row["Care Manager"], serviceCode: row.Service,
     monthOf: row["Reporting Period"], monthlyBilling: amount(row["Monthly Billing"]), eligibility: row.Eligibility,
     insuranceName: row["Primary Insurance Name"], diagnosisSummary: row.Conditions, payrollStatus: row["Payroll Inclusion Status"],
+    logEntries: amount(row["Log Entries"]), latestInteractiveCommunication: row["Latest Interactive Communication"], hmo: row.HMO,
+    codes: row.Codes.split(",").map((code) => code.trim()).filter(Boolean), validationStatus: row["Validation Status"],
+    dataQualityStatus: row["Data Quality Status"], duplicateStatus: row["Duplicate Status"],
   })).filter((row) => {
     const scope = principal.scopes;
     return scope.organizationIds.includes(row.organizationId) && scope.practiceIds.includes(row.practiceId)

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authorize } from "../security/authorization";
 import { readAuthorizedMonthlyRecords } from "../data/repository";
 import { appendAuditEvent } from "../audit/auditService";
+import { roleHasPermission } from "../../shared/authorization";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 
@@ -66,6 +67,9 @@ clinicalRouter.get("/patients", authorize("patient:view"), async (req, res, next
     await appendAuditEvent({ principal: res.locals.principal, action: "patient.search", resourceType: "patient-collection", resourceId: monthOf, result: "success", source: "backend", correlationId: res.locals.correlationId });
     const canSeeBilling = ["System Administrator", "Billing Administrator", "Operations Administrator"].includes(res.locals.principal.role);
     const canSeeClinical = ["System Administrator", "Clinical Administrator", "Supervisor", "Care Manager"].includes(res.locals.principal.role);
+    const canSeePerformance = roleHasPermission(res.locals.principal.role, "performance:view");
+    const canSeeQuality = roleHasPermission(res.locals.principal.role, "quality:view");
+    const canSeePayroll = roleHasPermission(res.locals.principal.role, "payroll:view");
     res.json({
       monthOf,
       records: records.map((record) => ({
@@ -80,6 +84,9 @@ clinicalRouter.get("/patients", authorize("patient:view"), async (req, res, next
         careManagerName: record.careManagerName,
         serviceCode: record.serviceCode,
         eligibility: record.eligibility,
+        ...(canSeePerformance ? { logEntries: record.logEntries, latestInteractiveCommunication: record.latestInteractiveCommunication, hmo: record.hmo, codes: record.codes } : {}),
+        ...(canSeeQuality ? { validationStatus: record.validationStatus, dataQualityStatus: record.dataQualityStatus, duplicateStatus: record.duplicateStatus } : {}),
+        ...(canSeePayroll ? { payrollStatus: record.payrollStatus } : {}),
         ...(canSeeBilling ? { monthlyBilling: record.monthlyBilling, insuranceName: record.insuranceName } : {}),
         ...(canSeeClinical ? { diagnosisSummary: record.diagnosisSummary } : {}),
       })),
