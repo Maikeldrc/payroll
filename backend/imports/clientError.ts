@@ -5,7 +5,7 @@ export interface ImportClientError {
 
 const SAFE_IMPORT_ERRORS: Array<{ pattern: RegExp; reason: string; message: string }> = [
   {
-    pattern: /Formula, hyperlink or rich content rejected|Formula content rejected/,
+    pattern: /Formula|hyperlink|rich content|Unsupported spreadsheet content/,
     reason: "unsafe_spreadsheet_content",
     message: "El archivo contiene fórmulas, hipervínculos o contenido enriquecido no permitido. Convierta esas celdas a valores antes de importarlo.",
   },

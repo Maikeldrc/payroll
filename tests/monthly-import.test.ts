@@ -6,6 +6,7 @@ import { canonicalHeader } from "../backend/imports/headerAliases";
 import { normalizeImport } from "../backend/imports/normalizationEngine";
 import { applyDuplicateClassification } from "../backend/imports/duplicateEngine";
 import { MONTHLY_RECORD_HEADERS } from "../backend/google/schemas";
+import ExcelJS from "exceljs";
 
 const principal = {
   uid: "synthetic-user", role: "Operations Administrator" as const,
@@ -17,6 +18,14 @@ function csvFile(headers: string[], row: string[]): Express.Multer.File {
     originalname: "synthetic.csv", mimetype: "text/csv",
     buffer: Buffer.from(`${headers.join(",")}\n${row.join(",")}`), size: 1,
   } as Express.Multer.File;
+}
+
+async function xlsxFile(rows: unknown[][]): Promise<Express.Multer.File> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Import");
+  rows.forEach((row) => worksheet.addRow(row));
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  return { originalname: "synthetic.xlsx", mimetype: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer, size: buffer.length } as Express.Multer.File;
 }
 
 test("reporting period rejects impossible months", () => {
@@ -64,6 +73,33 @@ test("imports with no code columns remain valid for non-code services", async ()
   const { records } = normalizeImport({ analyzed, reportingPeriod: "2026-08", fileHash: "c".repeat(64), importBatchId: "batch", principal });
   assert.equal(records[0].codes.length, 0);
   assert.equal(records[0].validationStatus, "Valid");
+});
+
+test("XLSX analysis keeps visible values while stripping formulas, links and rich formatting", async () => {
+  const file = await xlsxFile([
+    ["MRN", "Patient", "Provider", "Care Manager", "Service", "Month Of"],
+    [
+      "MRN-5",
+      { formula: '"Synthetic Person"', result: "Synthetic Person" },
+      { text: "Dr Synthetic", hyperlink: "https://example.invalid/provider" },
+      { richText: [{ text: "Synthetic " }, { text: "Manager" }] },
+      "CCM",
+      { formula: '"2026-08"', result: "2026-08" },
+    ],
+  ]);
+  const analyzed = await analyzeFile(file);
+  assert.equal(analyzed.rows[0].values.Patient, "Synthetic Person");
+  assert.equal(analyzed.rows[0].values.Provider, "Dr Synthetic");
+  assert.equal(analyzed.rows[0].values["Care Manager"], "Synthetic Manager");
+  assert.equal(analyzed.rows[0].values["Month Of"], "2026-08");
+});
+
+test("XLSX cached formula results cannot reintroduce spreadsheet injection", async () => {
+  const file = await xlsxFile([
+    ["MRN", "Patient", "Provider", "Care Manager", "Service"],
+    ["MRN-6", { formula: '"ignored"', result: "=HYPERLINK(\"https://example.invalid\")" }, "Dr Synthetic", "Manager", "CCM"],
+  ]);
+  await assert.rejects(() => analyzeFile(file), /Formula content rejected/);
 });
 
 test("duplicate engine omits exact matches and flags changed business keys for review", async () => {

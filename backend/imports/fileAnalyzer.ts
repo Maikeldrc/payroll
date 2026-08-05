@@ -10,7 +10,28 @@ const REQUIRED_GROUPS = [["MRN"], ["Patient", "First Name+Last Name"], ["Provide
 
 function safeCell(value: unknown, field: string): string {
   if (value instanceof Date) return value.toISOString();
-  if (value !== null && typeof value === "object") throw new Error(`Formula, hyperlink or rich content rejected in ${field}`);
+  if (value !== null && typeof value === "object") {
+    const cell = value as Record<string, unknown>;
+    if ("formula" in cell || "sharedFormula" in cell) {
+      if (!("result" in cell) || cell.result === undefined || cell.result === null) {
+        throw new Error(`Formula without a cached value rejected in ${field}`);
+      }
+      return safeCell(cell.result, field);
+    }
+    if (typeof cell.text === "string" && typeof cell.hyperlink === "string") {
+      return safeCell(cell.text, field);
+    }
+    if (Array.isArray(cell.richText)) {
+      const text = cell.richText.map((part) => {
+        if (!part || typeof part !== "object" || typeof (part as Record<string, unknown>).text !== "string") {
+          throw new Error(`Invalid rich content rejected in ${field}`);
+        }
+        return (part as Record<string, unknown>).text as string;
+      }).join("");
+      return safeCell(text, field);
+    }
+    throw new Error(`Unsupported spreadsheet content rejected in ${field}`);
+  }
   const text = String(value ?? "").trim();
   if (/^[=+\-@\t\r]/.test(text)) throw new Error(`Formula content rejected in ${field}`);
   if (text.length > 4_000) throw new Error(`${field} exceeds maximum length`);
