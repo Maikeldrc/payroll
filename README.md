@@ -43,4 +43,10 @@ Passing the code gate does not establish HIPAA compliance. Production also requi
 
 The monthly storage model, required environment variables and operational procedures are documented in `docs/monthly-google-storage.md`. No production migration is performed by the application automatically.
 
+## Production endpoints
+
+- Frontend: `https://itera-payroll.vercel.app`
+- Backend: `https://itera-care-backend-hgrqaimkpa-uc.a.run.app`
+- Imports remain disabled until an approved fail-closed malware scanner is configured.
+
 The consolidated technical evidence and residual release blockers are recorded in `docs/security/technical-readiness-evidence.md`.
