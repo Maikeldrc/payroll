@@ -39,6 +39,8 @@ test("every sensitive route rejects anonymous requests before processing", async
     ["post", "/api/reporting-periods/initialize"], ["post", "/api/reporting-periods/recalculate"],
     ["post", "/api/reporting-periods/close"], ["post", "/api/reporting-periods/reopen"],
     ["get", "/api/storage/google/configuration"], ["get", "/api/storage/google/capacity"], ["post", "/api/session/logout"],
+    ["get", "/api/storage/backups"], ["post", "/api/storage/backups"], ["post", "/api/storage/backups/policy"],
+    ["post", "/api/storage/test-data/purge"],
   ];
   for (const [method, path] of cases) {
     const response = await request(app)[method](path).set("Origin", "https://app.itera.health");

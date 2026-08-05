@@ -96,6 +96,11 @@ export class GoogleSheetsService {
     await this.sheets.spreadsheets.values.clear({ spreadsheetId, range: sheetRange(title, "A2:ZZ") });
   }
 
+  async replaceDataRows(spreadsheetId: string, title: string, rows: Array<Array<string | number | boolean>>): Promise<void> {
+    await this.clearRows(spreadsheetId, title);
+    await this.appendRows(spreadsheetId, title, rows);
+  }
+
   async capacity(spreadsheetId: string): Promise<Array<{ title: string; rows: number; columns: number; cells: number }>> {
     await this.drive.getResource(spreadsheetId);
     const metadata = await this.sheets.spreadsheets.get({

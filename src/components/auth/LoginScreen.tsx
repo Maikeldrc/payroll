@@ -3,7 +3,7 @@ import { KeyRound, LockKeyhole, LogIn, ShieldCheck } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "../../context/AuthContext";
 import type { TotpEnrollmentChallenge } from "../../lib/firebase";
-import iteraHealthLogo from "../../assets/itera-health-logo.webp";
+import iteraHealthLogo from "../../assets/itera-official-logo.png";
 
 export const LoginScreen: React.FC = () => {
   const {

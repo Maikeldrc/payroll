@@ -2,7 +2,7 @@ import React from "react";
 import { Calendar, LogOut, ShieldCheck } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
-import iteraHealthLogo from "../../assets/itera-health-logo.webp";
+import iteraHealthLogo from "../../assets/itera-official-logo.png";
 
 export const Header: React.FC = () => {
   const { currentUserRole, globalFilters, setGlobalFilters } = useApp();
@@ -16,7 +16,7 @@ export const Header: React.FC = () => {
           <img
             src={iteraHealthLogo}
             alt="ITERA Health"
-            className="h-11 w-auto max-w-[168px] shrink-0 object-contain object-left sm:h-12 sm:max-w-[184px]"
+            className="h-11 w-auto max-w-[190px] shrink-0 object-contain object-left sm:h-12 sm:max-w-[220px]"
           />
           <div className="hidden h-9 w-px bg-slate-200 sm:block" aria-hidden="true" />
           <div className="hidden min-w-0 sm:block">

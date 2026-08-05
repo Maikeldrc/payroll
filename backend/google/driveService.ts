@@ -89,6 +89,18 @@ export class GoogleDriveService {
     return this.getResource(response.data.id);
   }
 
+  async copyFile(fileId: string, name: string, parentId: string): Promise<DriveResource> {
+    await Promise.all([this.getResource(fileId), this.getResource(parentId)]);
+    const response = await this.drive.files.copy({
+      fileId,
+      supportsAllDrives: true,
+      fields: "id,name,mimeType,driveId,parents",
+      requestBody: { name, parents: [parentId] },
+    });
+    if (!response.data.id) throw new Error("Google Drive did not return the backup file ID");
+    return this.getResource(response.data.id);
+  }
+
   async findUniqueSpreadsheet(name: string, parentId: string): Promise<DriveResource | null> {
     const matches = await this.listChildren(parentId, name, SPREADSHEET_MIME);
     if (matches.length > 1) throw new DuplicateDriveResourceError(name, matches.map((item) => item.id));

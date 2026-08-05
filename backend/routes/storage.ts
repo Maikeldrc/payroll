@@ -9,10 +9,15 @@ import { MonthlySpreadsheetManager } from "../google/monthlySpreadsheetManager";
 import { MonthlyProcessingService } from "../monthly/monthlyProcessingService";
 import { acquirePeriodLock, closePeriodLock, releasePeriodLock, reopenPeriod } from "../imports/periodLockService";
 import { authorize } from "../security/authorization";
+import { BackupService } from "../maintenance/backupService";
+import { TestDataService } from "../maintenance/testDataService";
+import { roleHasPermission } from "../../shared/authorization";
 
 const periodSchema = z.object({ reportingPeriod: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
 const closeSchema = periodSchema.extend({ notes: z.string().max(1000).default("") });
 const reopenSchema = periodSchema.extend({ reason: z.string().min(10).max(1000) });
+const backupPolicySchema = z.object({ mode: z.enum(["manual", "automatic"]), frequency: z.enum(["daily", "weekly"]) });
+const purgeTestDataSchema = z.object({ confirmation: z.literal("BORRAR DATOS DE PRUEBA") });
 export const storageRouter = Router();
 
 function masked(value: string): string {
@@ -28,6 +33,43 @@ storageRouter.get("/storage/google/configuration", authorize("configuration:view
     monthlySheetNamingConvention: "Monthly Data - YYYY-MM", capacityWarningThreshold: config.capacityWarningThreshold,
     maximumUploadSizeBytes: 10 * 1024 * 1024, allowedFileTypes: ["csv", "xlsx"],
   });
+});
+
+storageRouter.get("/storage/backups", authorize("configuration:view"), async (_req, res, next) => {
+  try {
+    const service = new BackupService();
+    if (roleHasPermission(res.locals.principal.role, "configuration:manage") && await service.isAutomaticBackupDue(res.locals.principal)) {
+      await service.create(res.locals.principal, "automatic");
+    }
+    res.json({ policy: await service.getPolicy(res.locals.principal), backups: await service.list(res.locals.principal) });
+  } catch (error) { next(error); }
+});
+
+storageRouter.post("/storage/backups", authorize("configuration:manage"), async (_req, res, next) => {
+  try {
+    const backup = await new BackupService().create(res.locals.principal, "manual");
+    await appendAuditEvent({ principal: res.locals.principal, action: "data.backup.created", resourceType: "google-drive-backup", resourceId: backup.backupId, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: "manual" });
+    res.status(201).json(backup);
+  } catch (error) { next(error); }
+});
+
+storageRouter.post("/storage/backups/policy", authorize("configuration:manage"), async (req, res, next) => {
+  try {
+    const { mode, frequency } = backupPolicySchema.parse(req.body);
+    const policy = await new BackupService().setPolicy(res.locals.principal, mode, frequency);
+    await appendAuditEvent({ principal: res.locals.principal, action: "data.backup.policy.updated", resourceType: "backup-policy", resourceId: res.locals.principal.scopes.organizationIds[0], result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `${mode}:${frequency}` });
+    res.json({ policy });
+  } catch (error) { next(error); }
+});
+
+storageRouter.post("/storage/test-data/purge", authorize("configuration:manage"), async (req, res, next) => {
+  try {
+    purgeTestDataSchema.parse(req.body);
+    const backup = await new BackupService().create(res.locals.principal, "pre-cleanup");
+    const result = await new TestDataService().purge(res.locals.principal);
+    await appendAuditEvent({ principal: res.locals.principal, action: "test-data.purged", resourceType: "monthly-google-sheets", resourceId: res.locals.principal.scopes.organizationIds[0], result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `records:${result.removedRecords};periods:${result.purgedPeriods.length};mixed:${result.mixedPeriods.length}` });
+    res.json({ ...result, backup });
+  } catch (error) { next(error); }
 });
 
 storageRouter.post("/storage/google/validate", authorize("configuration:manage"), async (_req, res, next) => {

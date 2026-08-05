@@ -17,6 +17,7 @@ import { ImportWizard } from "./components/import/ImportWizard";
 import { ServiceAnalyticsView } from "./components/analytics/ServiceAnalyticsView";
 import { ProviderPerformanceView } from "./components/analytics/ProviderPerformanceView";
 import { ConfigurationView } from "./components/config/ConfigurationView";
+import { ProductionSettings } from "./components/config/ProductionSettings";
 import { AuditLogView } from "./components/audit/AuditLogView";
 import { PatientDetailModal } from "./components/patient/PatientDetailModal";
 import { CareManagerDetailModal } from "./components/caremanager/CareManagerDetailModal";
@@ -97,7 +98,7 @@ const MainContent: React.FC = () => {
             {activeTab === "reports" && <ReportsCenter />}
 
             {activeTab === "config" && demoMode && <ConfigurationView />}
-            {activeTab === "config" && !demoMode && <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6"><h2 className="font-bold text-amber-950">Configuración protegida</h2><p className="mt-2 text-sm text-amber-900">La administración productiva se realiza mediante APIs y workflows autorizados; no se permiten cambios locales.</p></section>}
+            {activeTab === "config" && !demoMode && <ProductionSettings />}
 
             {activeTab === "audit" && <AuditLogView />}
           </div>
