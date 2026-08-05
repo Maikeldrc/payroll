@@ -1,6 +1,20 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { auth, authPersistenceReady, loginWithEmail, logoutFirebase, signInWithGoogle, subscribeToAuthChanges } from "../lib/firebase";
+import {
+  auth,
+  authPersistenceReady,
+  beginTotpEnrollment,
+  completeTotpEnrollment,
+  getTotpSignInChallenge,
+  hasTotpEnrollment,
+  loginWithEmail,
+  logoutFirebase,
+  resolveTotpSignIn,
+  signInWithGoogle,
+  subscribeToAuthChanges,
+  type TotpEnrollmentChallenge,
+  type TotpSignInChallenge,
+} from "../lib/firebase";
 import type { UserRole } from "../types";
 import { isRoleName } from "../../shared/authorization";
 import { getBackendUrl } from "../config/runtime";
@@ -23,8 +37,13 @@ interface AuthContextValue {
   claims: AuthClaims | null;
   loading: boolean;
   accessError: string | null;
+  totpSignInRequired: boolean;
+  totpEnrollmentRequired: boolean;
   signInEmail: (email: string, password: string) => Promise<void>;
   signInGoogle: () => Promise<void>;
+  beginTotpSetup: () => Promise<TotpEnrollmentChallenge>;
+  completeTotpSetup: (challenge: TotpEnrollmentChallenge, code: string) => Promise<void>;
+  verifyTotpSignIn: (code: string) => Promise<void>;
   logout: (reason?: string) => Promise<void>;
   getIdToken: () => Promise<string>;
 }
@@ -59,7 +78,11 @@ async function validateBackendSession(user: User, localClaims: AuthClaims): Prom
     credentials: "omit",
     cache: "no-store",
   });
-  if (!response.ok) throw new Error("El backend rechazó la sesión.");
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: unknown };
+    const code = typeof payload.error === "string" ? payload.error : "backend_session_rejected";
+    throw new BackendSessionError(code);
+  }
   const serverPrincipal = await response.json() as { role?: unknown; scopes?: Partial<Omit<AuthClaims, "role">> };
   if (!isRoleName(serverPrincipal.role) || serverPrincipal.role !== localClaims.role) throw new Error("Los roles de sesión no coinciden.");
   return {
@@ -73,11 +96,21 @@ async function validateBackendSession(user: User, localClaims: AuthClaims): Prom
   };
 }
 
+class BackendSessionError extends Error {
+  constructor(readonly code: string) {
+    super(code === "multifactor_authentication_required"
+      ? "Se requiere autenticación multifactor para este rol."
+      : "El backend rechazó la sesión.");
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [claims, setClaims] = useState<AuthClaims | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [totpSignInChallenge, setTotpSignInChallenge] = useState<TotpSignInChallenge | null>(null);
+  const [totpEnrollmentRequired, setTotpEnrollmentRequired] = useState(false);
   const loginStartedAt = useRef<number | null>(null);
   const lastActivityAt = useRef(Date.now());
 
@@ -98,6 +131,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setClaims(null);
     setAccessError(null);
+    setTotpSignInChallenge(null);
+    setTotpEnrollmentRequired(false);
     loginStartedAt.current = null;
     await logoutFirebase();
   }, []);
@@ -112,6 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAccessError(null);
         setUser(nextUser);
         setClaims(null);
+        setTotpEnrollmentRequired(false);
         if (!nextUser) {
           loginStartedAt.current = null;
           setLoading(false);
@@ -125,7 +161,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setClaims(nextClaims);
         } catch (error) {
           if (cancelled) return;
-          setAccessError(error instanceof Error ? error.message : "Acceso no autorizado.");
+          if (error instanceof BackendSessionError
+            && error.code === "multifactor_authentication_required"
+            && !hasTotpEnrollment(nextUser)) {
+            setTotpEnrollmentRequired(true);
+          } else {
+            setAccessError(error instanceof Error ? error.message : "Acceso no autorizado.");
+          }
         } finally {
           if (!cancelled) setLoading(false);
         }
@@ -157,13 +199,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInEmail = useCallback(async (email: string, password: string) => {
     setAccessError(null);
-    await loginWithEmail(email, password);
+    try {
+      await loginWithEmail(email, password);
+    } catch (error) {
+      const challenge = getTotpSignInChallenge(error);
+      if (!challenge) throw error;
+      setTotpSignInChallenge(challenge);
+    }
   }, []);
 
   const signInGoogle = useCallback(async () => {
     setAccessError(null);
-    await signInWithGoogle();
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      const challenge = getTotpSignInChallenge(error);
+      if (!challenge) throw error;
+      setTotpSignInChallenge(challenge);
+    }
   }, []);
+
+  const beginTotpSetup = useCallback(async () => {
+    if (!user || !totpEnrollmentRequired) throw new Error("No hay una inscripción MFA pendiente.");
+    return beginTotpEnrollment(user);
+  }, [totpEnrollmentRequired, user]);
+
+  const completeTotpSetup = useCallback(async (challenge: TotpEnrollmentChallenge, code: string) => {
+    if (!user || !totpEnrollmentRequired) throw new Error("No hay una inscripción MFA pendiente.");
+    await completeTotpEnrollment(user, challenge, code);
+    const nextClaims = await validateBackendSession(user, await readClaims(user));
+    loginStartedAt.current = Date.now();
+    lastActivityAt.current = Date.now();
+    setClaims(nextClaims);
+    setTotpEnrollmentRequired(false);
+    setAccessError(null);
+  }, [totpEnrollmentRequired, user]);
+
+  const verifyTotpSignIn = useCallback(async (code: string) => {
+    if (!totpSignInChallenge) throw new Error("No hay un desafío MFA pendiente.");
+    await resolveTotpSignIn(totpSignInChallenge, code);
+    setTotpSignInChallenge(null);
+  }, [totpSignInChallenge]);
 
   const getIdToken = useCallback(async () => {
     if (!user || !claims) throw new Error("Authentication required");
@@ -171,8 +247,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [claims, user]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, claims, loading, accessError, signInEmail, signInGoogle, logout, getIdToken }),
-    [user, claims, loading, accessError, signInEmail, signInGoogle, logout, getIdToken],
+    () => ({
+      user,
+      claims,
+      loading,
+      accessError,
+      totpSignInRequired: Boolean(totpSignInChallenge),
+      totpEnrollmentRequired,
+      signInEmail,
+      signInGoogle,
+      beginTotpSetup,
+      completeTotpSetup,
+      verifyTotpSignIn,
+      logout,
+      getIdToken,
+    }),
+    [
+      user, claims, loading, accessError, totpSignInChallenge, totpEnrollmentRequired,
+      signInEmail, signInGoogle, beginTotpSetup, completeTotpSetup, verifyTotpSignIn, logout, getIdToken,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
