@@ -10,6 +10,11 @@ const REQUIRED_GROUPS = [["MRN"], ["Patient", "First Name+Last Name"], ["Provide
 
 function safeCell(value: unknown, field: string): string {
   if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error(`Invalid numeric content rejected in ${field}`);
+    return String(value);
+  }
+  if (typeof value === "boolean") return value ? "true" : "false";
   if (value !== null && typeof value === "object") {
     const cell = value as Record<string, unknown>;
     if ("formula" in cell || "sharedFormula" in cell) {
@@ -33,6 +38,7 @@ function safeCell(value: unknown, field: string): string {
     throw new Error(`Unsupported spreadsheet content rejected in ${field}`);
   }
   const text = String(value ?? "").trim();
+  if (/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return text;
   if (/^[=+\-@\t\r]/.test(text)) throw new Error(`Formula content rejected in ${field}`);
   if (text.length > 4_000) throw new Error(`${field} exceeds maximum length`);
   return text;

@@ -102,6 +102,22 @@ test("XLSX cached formula results cannot reintroduce spreadsheet injection", asy
   await assert.rejects(() => analyzeFile(file), /Formula content rejected/);
 });
 
+test("negative numeric values are data, while formula-like negative text remains blocked", async () => {
+  const file = await xlsxFile([
+    ["MRN", "Patient", "Provider", "Care Manager", "Service", "Adjustment", "Calculated Adjustment"],
+    ["MRN-7", "Synthetic Person", "Dr Synthetic", "Manager", "CCM", -10, { formula: "0-5", result: -5 }],
+  ]);
+  const analyzed = await analyzeFile(file);
+  assert.equal(analyzed.rows[0].values.Adjustment, "-10");
+  assert.equal(analyzed.rows[0].values["Calculated Adjustment"], "-5");
+
+  const unsafe = await xlsxFile([
+    ["MRN", "Patient", "Provider", "Care Manager", "Service"],
+    ["MRN-8", "-CMD|' /C calc'!A0", "Dr Synthetic", "Manager", "CCM"],
+  ]);
+  await assert.rejects(() => analyzeFile(unsafe), /Formula content rejected/);
+});
+
 test("duplicate engine omits exact matches and flags changed business keys for review", async () => {
   const analyzed = await analyzeFile(csvFile(
     ["MRN", "Patient", "Provider", "Care Manager", "Service", "Month Of"],
