@@ -13,13 +13,20 @@ if (!organization || !/^[A-Za-z0-9._-]{1,128}$/.test(organization)) {
   throw new Error("A safe --organization identifier is required");
 }
 
-if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID });
-const snapshot = await getFirestore().collection("securityAuditEvents")
-  .where("organization", "==", organization).orderBy("sequence", "asc").get();
+const app = getApps().length
+  ? getApps()[0]
+  : initializeApp({ credential: applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID });
+const databaseId = process.env.AUDIT_FIRESTORE_DATABASE_ID?.trim();
+const firestore = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+const snapshot = await firestore.collection("securityAuditEvents")
+  .where("organization", "==", organization).get();
+const documents = [...snapshot.docs].sort(
+  (left, right) => Number(left.data().sequence) - Number(right.data().sequence),
+);
 
 let previousHash = "GENESIS";
 let expectedSequence = 1;
-for (const document of snapshot.docs) {
+for (const document of documents) {
   const stored = document.data();
   const event = {
     eventId: stored.eventId,
@@ -32,6 +39,7 @@ for (const document of snapshot.docs) {
     action: stored.action,
     resourceType: stored.resourceType,
     resourceId: stored.resourceId,
+    reportingPeriod: stored.reportingPeriod,
     result: stored.result,
     source: stored.source,
     correlationId: stored.correlationId,
@@ -39,8 +47,14 @@ for (const document of snapshot.docs) {
     previousHash: stored.previousHash,
   };
   const calculatedHash = crypto.createHash("sha256").update(JSON.stringify(event)).digest("hex");
-  if (event.sequence !== expectedSequence || event.previousHash !== previousHash || stored.hash !== calculatedHash) {
-    throw new Error(`Audit chain verification failed at sequence ${expectedSequence}`);
+  const sequenceValid = event.sequence === expectedSequence;
+  const linkValid = event.previousHash === previousHash;
+  const hashValid = stored.hash === calculatedHash;
+  if (!sequenceValid || !linkValid || !hashValid) {
+    throw new Error(
+      `Audit chain verification failed at sequence ${expectedSequence} `
+      + `(sequence=${sequenceValid}, link=${linkValid}, hash=${hashValid})`,
+    );
   }
   previousHash = stored.hash;
   expectedSequence += 1;
