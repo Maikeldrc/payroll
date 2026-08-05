@@ -29,7 +29,7 @@ steps:
       - --concurrency=40
       - --cpu=1
       - --memory=1Gi
-      - --timeout=60s
+      - --timeout=300s
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     entrypoint: gcloud

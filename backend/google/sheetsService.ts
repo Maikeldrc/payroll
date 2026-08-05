@@ -101,6 +101,41 @@ export class GoogleSheetsService {
     await this.appendRows(spreadsheetId, title, rows);
   }
 
+  async restoreSpreadsheet(sourceSpreadsheetId: string, targetSpreadsheetId: string): Promise<number> {
+    if (sourceSpreadsheetId === targetSpreadsheetId) throw new Error("Backup source and restore target must be different spreadsheets");
+    await Promise.all([this.drive.getResource(sourceSpreadsheetId), this.drive.getResource(targetSpreadsheetId)]);
+    const [source, target] = await Promise.all([
+      this.sheets.spreadsheets.get({ spreadsheetId: sourceSpreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+      this.sheets.spreadsheets.get({ spreadsheetId: targetSpreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+    ]);
+    const sourceSheets = (source.data.sheets || []).map((sheet) => ({ sheetId: sheet.properties?.sheetId, title: sheet.properties?.title }))
+      .filter((sheet): sheet is { sheetId: number; title: string } => Number.isInteger(sheet.sheetId) && Boolean(sheet.title));
+    const targetSheetIds = (target.data.sheets || []).map((sheet) => sheet.properties?.sheetId)
+      .filter((sheetId): sheetId is number => Number.isInteger(sheetId));
+    if (!sourceSheets.length || !targetSheetIds.length) throw new Error("Backup or target spreadsheet has no restorable sheets");
+
+    const copied: Array<{ sheetId: number; title: string }> = [];
+    for (const sheet of sourceSheets) {
+      const result = await this.sheets.spreadsheets.sheets.copyTo({
+        spreadsheetId: sourceSpreadsheetId,
+        sheetId: sheet.sheetId,
+        requestBody: { destinationSpreadsheetId: targetSpreadsheetId },
+      });
+      if (!Number.isInteger(result.data.sheetId)) throw new Error("Google Sheets did not return the copied sheet ID");
+      copied.push({ sheetId: result.data.sheetId as number, title: sheet.title });
+    }
+
+    await this.sheets.spreadsheets.batchUpdate({
+      spreadsheetId: targetSpreadsheetId,
+      requestBody: { requests: targetSheetIds.map((sheetId) => ({ deleteSheet: { sheetId } })) },
+    });
+    await this.sheets.spreadsheets.batchUpdate({
+      spreadsheetId: targetSpreadsheetId,
+      requestBody: { requests: copied.map((sheet) => ({ updateSheetProperties: { properties: { sheetId: sheet.sheetId, title: sheet.title }, fields: "title" } })) },
+    });
+    return copied.length;
+  }
+
   async capacity(spreadsheetId: string): Promise<Array<{ title: string; rows: number; columns: number; cells: number }>> {
     await this.drive.getResource(spreadsheetId);
     const metadata = await this.sheets.spreadsheets.get({

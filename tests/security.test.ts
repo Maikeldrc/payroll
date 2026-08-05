@@ -40,6 +40,7 @@ test("every sensitive route rejects anonymous requests before processing", async
     ["post", "/api/reporting-periods/close"], ["post", "/api/reporting-periods/reopen"],
     ["get", "/api/storage/google/configuration"], ["get", "/api/storage/google/capacity"], ["post", "/api/session/logout"],
     ["get", "/api/storage/backups"], ["post", "/api/storage/backups"], ["post", "/api/storage/backups/policy"],
+    ["post", "/api/storage/backups/00000000-0000-4000-8000-000000000000/restore"],
     ["post", "/api/storage/test-data/purge"],
   ];
   for (const [method, path] of cases) {

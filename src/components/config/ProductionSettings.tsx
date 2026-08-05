@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Archive, CheckCircle2, Cloud, Database, HardDrive, Loader2, RefreshCw, Save, Settings2, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, Cloud, Database, HardDrive, Loader2, RefreshCw, RotateCcw, Save, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/apiClient";
 import { roleHasPermission } from "../../../shared/authorization";
@@ -43,6 +43,8 @@ export const ProductionSettings: React.FC = () => {
   const [mode, setMode] = useState<BackupPolicy["mode"]>("manual");
   const [frequency, setFrequency] = useState<BackupPolicy["frequency"]>("daily");
   const [confirmation, setConfirmation] = useState("");
+  const [restoreCandidate, setRestoreCandidate] = useState<BackupItem | null>(null);
+  const [restoreConfirmation, setRestoreConfirmation] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -113,6 +115,24 @@ export const ProductionSettings: React.FC = () => {
     } catch { setError("La limpieza no pudo completarse. Ningún período mixto se elimina automáticamente."); setBusy(null); }
   };
 
+  const restoreBackup = async () => {
+    if (!restoreCandidate || restoreConfirmation !== `RESTAURAR ${restoreCandidate.backupId}`) return;
+    setBusy("restore"); setError(null); setNotice(null);
+    try {
+      const response = await apiFetch(`/api/storage/backups/${encodeURIComponent(restoreCandidate.backupId)}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: restoreConfirmation }),
+      });
+      if (!response.ok) throw new Error("restore_failed");
+      const result = await response.json() as { restoredMonthlyFiles: number; restoredMasterSheets: number; safetyBackup: { backupId: string } };
+      setRestoreCandidate(null);
+      setRestoreConfirmation("");
+      setNotice(`Restauración completada: ${result.restoredMonthlyFiles} archivos mensuales y ${result.restoredMasterSheets} pestañas maestras. Respaldo de seguridad: ${result.safetyBackup.backupId}.`);
+      await load();
+    } catch { setError("La restauración no pudo completarse. El respaldo preventivo conserva el estado anterior al intento."); setBusy(null); }
+  };
+
   return (
     <section className="space-y-6 pb-12 text-sm text-slate-700">
       <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -155,7 +175,13 @@ export const ProductionSettings: React.FC = () => {
 
       <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3"><div className="rounded-xl bg-slate-100 p-3 text-slate-700"><Database className="h-6 w-6" /></div><div><h2 className="text-lg font-black text-slate-950">Historial de respaldos</h2><p className="text-xs text-slate-500">Últimas copias registradas por la plataforma</p></div></div>
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="border-b border-slate-200 text-slate-500"><tr><th className="py-3">Fecha</th><th>Origen</th><th>Estado</th><th>Archivos</th><th>ID de respaldo</th></tr></thead><tbody>{backups?.backups.map((backup) => <tr key={backup.backupId} className="border-b border-slate-100"><td className="py-3">{new Date(backup.createdAt).toLocaleString()}</td><td>{backup.trigger}</td><td><span className={`rounded-full px-2 py-1 font-bold ${backup.status === "complete" ? "bg-emerald-50 text-emerald-700" : backup.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{backup.status}</span></td><td>{backup.fileCount}</td><td className="font-mono text-slate-500">{backup.backupId}</td></tr>)}</tbody></table>{backups?.backups.length === 0 && <p className="py-6 text-center text-slate-500">Todavía no existen respaldos registrados.</p>}</div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="border-b border-slate-200 text-slate-500"><tr><th className="py-3">Fecha</th><th>Origen</th><th>Estado</th><th>Archivos</th><th>ID de respaldo</th><th className="text-right">Acción</th></tr></thead><tbody>{backups?.backups.map((backup) => <tr key={backup.backupId} className="border-b border-slate-100"><td className="py-3">{new Date(backup.createdAt).toLocaleString()}</td><td>{backup.trigger}</td><td><span className={`rounded-full px-2 py-1 font-bold ${backup.status === "complete" ? "bg-emerald-50 text-emerald-700" : backup.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{backup.status}</span></td><td>{backup.fileCount}</td><td className="font-mono text-slate-500">{backup.backupId}</td><td className="text-right"><button disabled={!canManage || backup.status !== "complete" || Boolean(busy)} onClick={() => { setRestoreCandidate(backup); setRestoreConfirmation(""); setError(null); setNotice(null); }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-bold text-amber-800 disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" /> Restaurar</button></td></tr>)}</tbody></table>{backups?.backups.length === 0 && <p className="py-6 text-center text-slate-500">Todavía no existen respaldos registrados.</p>}</div>
+        {restoreCandidate && <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" /><div><h3 className="font-black text-amber-950">Confirmar restauración del respaldo</h3><p className="mt-1 text-xs leading-5 text-amber-900">Se restaurarán el Master y las hojas mensuales conservando sus IDs actuales. Primero se creará automáticamente un respaldo del estado presente.</p></div></div>
+          <p className="mt-3 text-xs text-slate-700">Respaldo seleccionado: <code className="font-mono font-bold">{restoreCandidate.backupId}</code></p>
+          <label className="mt-3 block text-xs font-bold text-slate-700">Escriba <code className="rounded bg-white px-1.5 py-0.5 text-amber-800">RESTAURAR {restoreCandidate.backupId}</code><input value={restoreConfirmation} onChange={(event) => setRestoreConfirmation(event.target.value)} className="mt-2 w-full rounded-xl border border-amber-300 bg-white px-3 py-2.5 font-mono text-sm" /></label>
+          <div className="mt-3 flex flex-wrap gap-2"><button disabled={Boolean(busy) || restoreConfirmation !== `RESTAURAR ${restoreCandidate.backupId}`} onClick={() => void restoreBackup()} className="flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 font-bold text-white disabled:opacity-40"><RotateCcw className="h-4 w-4" />{busy === "restore" ? "Creando respaldo y restaurando…" : "Restaurar respaldo"}</button><button disabled={Boolean(busy)} onClick={() => { setRestoreCandidate(null); setRestoreConfirmation(""); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-bold text-slate-700">Cancelar</button></div>
+        </div>}
       </article>
 
       <article className="rounded-2xl border border-rose-200 bg-rose-50/50 p-6 shadow-sm">

@@ -18,6 +18,7 @@ const closeSchema = periodSchema.extend({ notes: z.string().max(1000).default(""
 const reopenSchema = periodSchema.extend({ reason: z.string().min(10).max(1000) });
 const backupPolicySchema = z.object({ mode: z.enum(["manual", "automatic"]), frequency: z.enum(["daily", "weekly"]) });
 const purgeTestDataSchema = z.object({ confirmation: z.literal("BORRAR DATOS DE PRUEBA") });
+const restoreBackupSchema = z.object({ confirmation: z.string().max(128) });
 export const storageRouter = Router();
 
 function masked(value: string): string {
@@ -59,6 +60,19 @@ storageRouter.post("/storage/backups/policy", authorize("configuration:manage"),
     const policy = await new BackupService().setPolicy(res.locals.principal, mode, frequency);
     await appendAuditEvent({ principal: res.locals.principal, action: "data.backup.policy.updated", resourceType: "backup-policy", resourceId: res.locals.principal.scopes.organizationIds[0], result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `${mode}:${frequency}` });
     res.json({ policy });
+  } catch (error) { next(error); }
+});
+
+storageRouter.post("/storage/backups/:backupId/restore", authorize("configuration:manage"), async (req, res, next) => {
+  try {
+    const backupId = z.string().uuid().parse(req.params.backupId);
+    const { confirmation } = restoreBackupSchema.parse(req.body);
+    if (confirmation !== `RESTAURAR ${backupId}`) return res.status(400).json({ error: "restore_confirmation_mismatch" });
+    const backupService = new BackupService();
+    const safetyBackup = await backupService.create(res.locals.principal, "pre-restore");
+    const result = await backupService.restore(res.locals.principal, backupId, new GoogleSheetsService());
+    await appendAuditEvent({ principal: res.locals.principal, action: "data.backup.restored", resourceType: "google-drive-backup", resourceId: backupId, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `safety-backup:${safetyBackup.backupId}` });
+    res.json({ ...result, safetyBackup });
   } catch (error) { next(error); }
 });
 

@@ -71,7 +71,7 @@ export class BackupService {
     return !Number.isFinite(elapsed) || elapsed >= interval;
   }
 
-  async create(principal: AuthenticatedPrincipal, trigger: "manual" | "automatic" | "pre-cleanup") {
+  async create(principal: AuthenticatedPrincipal, trigger: "manual" | "automatic" | "pre-cleanup" | "pre-restore") {
     const org = organization(principal);
     const backupId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -95,6 +95,43 @@ export class BackupService {
       await ref.set({ status: "failed", completedAt: new Date().toISOString(), failureType: error instanceof Error ? error.name : "UnknownError" }, { merge: true });
       throw error;
     }
+  }
+
+  async restore(principal: AuthenticatedPrincipal, backupId: string, sheetsService: import("../google/sheetsService").GoogleSheetsService) {
+    const org = organization(principal);
+    const backupSnapshot = await auditFirestore().collection("dataBackups").doc(backupId).get();
+    const backup = backupSnapshot.data();
+    if (!backupSnapshot.exists || backup?.organization !== org || backup?.status !== "complete" || typeof backup?.folderId !== "string") {
+      throw new Error("Backup is unavailable or outside the authorized organization");
+    }
+    const files = await this.drive.listChildren(backup.folderId, undefined, "application/vnd.google-apps.spreadsheet");
+    const masterCopies = files.filter((file) => file.name.startsWith("ITERA Payroll Master - "));
+    if (masterCopies.length !== 1) throw new Error("Backup does not contain one identifiable master spreadsheet");
+    const masterCopy = masterCopies[0];
+    const indexRows = await sheetsService.readRows(masterCopy.id, "Monthly_File_Index", "M", 10_000);
+    const monthlyReferences = indexRows.slice(1).filter((row) => /^\d{4}-(0[1-9]|1[0-2])$/.test(row[0] || "") && row[4] && row[5]);
+    const restorePlan = monthlyReferences.map((row) => {
+      const copies = files.filter((file) => file.name === `${row[5]} - Backup`);
+      if (copies.length !== 1) throw new Error(`Backup monthly spreadsheet is missing or duplicated for ${row[0]}`);
+      return { reportingPeriod: row[0], sourceId: copies[0].id, targetId: row[4] };
+    });
+    await Promise.all([
+      this.drive.getResource(masterCopy.id),
+      this.drive.getResource(googleStorageConfig().masterSpreadsheetId),
+      ...restorePlan.flatMap((item) => [this.drive.getResource(item.sourceId), this.drive.getResource(item.targetId)]),
+    ]);
+    const restored = [];
+    for (const item of restorePlan) {
+      const sheetCount = await sheetsService.restoreSpreadsheet(item.sourceId, item.targetId);
+      restored.push({ reportingPeriod: item.reportingPeriod, sheetCount });
+    }
+    const masterSheetCount = await sheetsService.restoreSpreadsheet(masterCopy.id, googleStorageConfig().masterSpreadsheetId);
+    const restoreId = crypto.randomUUID();
+    await auditFirestore().collection("dataRestoreEvents").doc(restoreId).set({
+      restoreId, backupId, organization: org, restoredBy: principal.uid, restoredAt: new Date().toISOString(),
+      restoredMonthlyFiles: restored.length, restoredMasterSheets: masterSheetCount, status: "complete",
+    });
+    return { restoreId, backupId, restoredMonthlyFiles: restored.length, restoredMasterSheets: masterSheetCount };
   }
 
   async list(principal: AuthenticatedPrincipal) {
