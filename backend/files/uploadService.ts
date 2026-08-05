@@ -73,9 +73,14 @@ export async function parseUpload(file: Express.Multer.File): Promise<MonthlyRec
   return mapRows(rows);
 }
 
-export async function assertMalwareScanClean(file: Express.Multer.File, hash: string): Promise<void> {
+export type UploadScanStatus = "clean" | "temporarily_bypassed";
+
+export async function assertMalwareScanClean(file: Express.Multer.File, hash: string): Promise<UploadScanStatus> {
   const scannerUrl = process.env.MALWARE_SCANNER_URL;
-  if (!scannerUrl) throw new Error("Malware scanner is not configured");
+  if (!scannerUrl) {
+    if (process.env.ALLOW_UNSCANNED_IMPORTS === "true") return "temporarily_bypassed";
+    throw new Error("Malware scanner is not configured");
+  }
   const response = await fetch(scannerUrl, {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream", "X-Content-SHA256": hash },
@@ -85,6 +90,7 @@ export async function assertMalwareScanClean(file: Express.Multer.File, hash: st
   if (!response.ok) throw new Error("Malware scanner unavailable");
   const result = await response.json() as { clean?: boolean };
   if (result.clean !== true) throw new Error("File rejected by malware scanner");
+  return "clean";
 }
 
 export async function reserveImport(hash: string, actorId: string, idempotencyKey: string): Promise<void> {

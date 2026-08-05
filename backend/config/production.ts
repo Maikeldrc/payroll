@@ -27,8 +27,11 @@ export function validateProductionConfiguration(): void {
   for (const name of ["GOOGLE_SHARED_DRIVE_ID", "GOOGLE_ROOT_FOLDER_ID", "GOOGLE_MONTHLY_FOLDER_ID", "GOOGLE_MASTER_FOLDER_ID", "GOOGLE_MASTER_SPREADSHEET_ID"] as const) {
     if (!GOOGLE_ID_PATTERN.test(process.env[name]!.trim())) throw new Error(`${name} is invalid`);
   }
-  if (process.env.IMPORTS_ENABLED === "true" && !process.env.MALWARE_SCANNER_URL?.startsWith("https://")) {
-    throw new Error("Enabled production imports require an HTTPS malware scanner");
+  if (process.env.MALWARE_SCANNER_URL && !process.env.MALWARE_SCANNER_URL.startsWith("https://")) {
+    throw new Error("Production malware scanner URL must use HTTPS");
+  }
+  if (process.env.IMPORTS_ENABLED === "true" && !process.env.MALWARE_SCANNER_URL && process.env.ALLOW_UNSCANNED_IMPORTS !== "true") {
+    throw new Error("Enabled production imports require an HTTPS malware scanner or an explicit temporary bypass");
   }
   if (process.env.IMPORT_ANALYSIS_TOKEN_SECRET!.length < 32) throw new Error("IMPORT_ANALYSIS_TOKEN_SECRET must contain at least 32 characters");
   if (process.env.APP_ENV && process.env.APP_ENV !== "production") {

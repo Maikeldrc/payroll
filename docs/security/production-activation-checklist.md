@@ -20,7 +20,7 @@
 
 - [ ] Deploy `itera-care-backend`; do not overwrite unrelated Cloud Run services.
 - [ ] Configure explicit backend CORS for the final Vercel domain and update Vercel `VITE_BACKEND_URL`.
-- [ ] Keep `IMPORTS_ENABLED=false` until the approved malware scanner passes fail-closed tests.
+- [ ] Temporary exception: if `IMPORTS_ENABLED=true` and `ALLOW_UNSCANNED_IMPORTS=true`, record formal risk acceptance and remove the bypass when an approved HTTPS malware scanner passes fail-closed tests.
 - [ ] Run `npm run release:gate` and environment-bound synthetic tests for auth, cross-tenant denial, upload edge cases, idempotency, locks, calculations, close/reopen, reports, and audit continuity.
 - [ ] Validate static frontend artifacts contain no secrets, IDs, PHI, backend code, or source maps.
 

@@ -4,7 +4,7 @@ import request from "supertest";
 import { createBackendApp } from "../backend/app";
 import { configuredDataStore, filterRecordsForPrincipal } from "../backend/data/repository";
 import type { MonthlyRecordRow } from "../backend/data/types";
-import { parseUpload } from "../backend/files/uploadService";
+import { assertMalwareScanClean, parseUpload } from "../backend/files/uploadService";
 import { PERMISSIONS, ROLE_NAMES, ROLE_PERMISSIONS, roleHasPermission, type Permission, type RoleName } from "../shared/authorization";
 import { validateProductionConfiguration } from "../backend/config/production";
 
@@ -83,6 +83,34 @@ test("production requires the monthly Google Sheets adapter and explicit resourc
     assert.throws(() => configuredDataStore(), /google-sheets-monthly/);
     process.env.DATA_STORE = "google-sheets-monthly";
     assert.doesNotThrow(() => validateProductionConfiguration());
+  } finally {
+    process.env = previous;
+  }
+});
+
+test("unscanned production imports require an explicit temporary bypass", async () => {
+  const previous = { ...process.env };
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.APP_ENV = "production";
+    process.env.FIREBASE_PROJECT_ID = "synthetic-project";
+    process.env.ALLOWED_ORIGINS = "https://app.itera.health";
+    process.env.AUDIT_FIRESTORE_DATABASE_ID = "itera-audit";
+    process.env.IMPORT_ANALYSIS_TOKEN_SECRET = "synthetic-secret-at-least-32-characters-long";
+    process.env.GOOGLE_SHARED_DRIVE_ID = "synthetic_shared_drive_id";
+    process.env.GOOGLE_ROOT_FOLDER_ID = "synthetic_root_folder_id";
+    process.env.GOOGLE_MONTHLY_FOLDER_ID = "synthetic_monthly_folder_id";
+    process.env.GOOGLE_MASTER_FOLDER_ID = "synthetic_master_folder_id";
+    process.env.GOOGLE_MASTER_SPREADSHEET_ID = "synthetic_master_spreadsheet_id";
+    process.env.DATA_STORE = "google-sheets-monthly";
+    process.env.IMPORTS_ENABLED = "true";
+    delete process.env.MALWARE_SCANNER_URL;
+    delete process.env.ALLOW_UNSCANNED_IMPORTS;
+    assert.throws(() => validateProductionConfiguration(), /explicit temporary bypass/);
+    process.env.ALLOW_UNSCANNED_IMPORTS = "true";
+    assert.doesNotThrow(() => validateProductionConfiguration());
+    const file = { originalname: "synthetic.csv", buffer: Buffer.from("safe"), mimetype: "text/csv" } as Express.Multer.File;
+    assert.equal(await assertMalwareScanClean(file, "synthetic-hash"), "temporarily_bypassed");
   } finally {
     process.env = previous;
   }

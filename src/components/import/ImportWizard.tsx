@@ -26,6 +26,7 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [analysisToken, setAnalysisToken] = useState("");
+  const [scanStatus, setScanStatus] = useState<"clean" | "temporarily_bypassed" | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ rowsImported: number; exactDuplicates: number; reviewRows: number; importBatchId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +46,9 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
     setBusy(true); setError(null); setResult(null);
     try {
       const response = await apiFetch("/api/imports/analyze", { method: "POST", body: formForFile() });
-      const body = await response.json() as { analysis?: Analysis; analysisToken?: string; error?: string };
+      const body = await response.json() as { analysis?: Analysis; analysisToken?: string; error?: string; uploadSecurity?: { malwareScan?: "clean" | "temporarily_bypassed" } };
       if (!response.ok || !body.analysis || !body.analysisToken) throw new Error(body.error || "analysis_failed");
-      setAnalysis(body.analysis); setAnalysisToken(body.analysisToken);
+      setAnalysis(body.analysis); setAnalysisToken(body.analysisToken); setScanStatus(body.uploadSecurity?.malwareScan || null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "analysis_failed");
     } finally { setBusy(false); }
@@ -69,7 +70,7 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
     } finally { setBusy(false); }
   };
 
-  const selectNewFile = (next: File | null) => { setFile(next); setAnalysis(null); setAnalysisToken(""); setResult(null); setError(null); };
+  const selectNewFile = (next: File | null) => { setFile(next); setAnalysis(null); setAnalysisToken(""); setScanStatus(null); setResult(null); setError(null); };
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
@@ -108,6 +109,7 @@ export const ImportWizard: React.FC<{ onComplete?: () => void }> = ({ onComplete
         <p className="mt-3 text-xs text-slate-500">Month Of: {analysis.monthOf.Match} coincide · {analysis.monthOf.Missing} ausente · {analysis.monthOf.Mismatch} distinto · {analysis.monthOf.Invalid} inválido</p>
         <p className="mt-1 text-xs text-slate-500">Columnas de código: {analysis.codeColumnsDetected.join(", ") || "ninguna"}. Códigos distintos: {analysis.codesDetected.length}.</p>
         {(analysis.rejectedRows > 0 || analysis.warningRows > 0) && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-amber-900">Las filas rechazadas o en revisión se conservan para trazabilidad, pero no se incluyen automáticamente en payroll.</p>}
+        {scanStatus === "temporarily_bypassed" && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">Excepción temporal activa: el archivo fue validado estructuralmente, pero no pasó por un escáner antimalware. La excepción queda registrada en auditoría.</p>}
       </div>}
 
       {result && <div className="mt-5 rounded-xl bg-emerald-50 p-4 text-emerald-900"><p className="flex items-center gap-2 font-black"><CheckCircle2 className="h-5 w-5" />Importación completada</p><p className="mt-1">{result.rowsImported} filas escritas, {result.exactDuplicates} duplicados exactos omitidos y {result.reviewRows} filas para revisión. Lote: {result.importBatchId}</p></div>}

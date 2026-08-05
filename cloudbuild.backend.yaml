@@ -22,7 +22,7 @@ steps:
       - --service-account=itera-care-backend@${PROJECT_ID}.iam.gserviceaccount.com
       - --ingress=all
       - --allow-unauthenticated
-      - --set-env-vars=NODE_ENV=production,APP_ENV=production,DATA_STORE=google-sheets-monthly,IMPORTS_ENABLED=false,FIREBASE_PROJECT_ID=${PROJECT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGIN},AUDIT_FIRESTORE_DATABASE_ID=${_AUDIT_DATABASE}
+      - --set-env-vars=NODE_ENV=production,APP_ENV=production,DATA_STORE=google-sheets-monthly,IMPORTS_ENABLED=true,ALLOW_UNSCANNED_IMPORTS=true,FIREBASE_PROJECT_ID=${PROJECT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGIN},AUDIT_FIRESTORE_DATABASE_ID=${_AUDIT_DATABASE}
       - --set-secrets=GOOGLE_SHARED_DRIVE_ID=itera-shared-drive-id:latest,GOOGLE_ROOT_FOLDER_ID=itera-root-folder-id:latest,GOOGLE_MONTHLY_FOLDER_ID=itera-monthly-folder-id:latest,GOOGLE_MASTER_FOLDER_ID=itera-master-folder-id:latest,GOOGLE_MASTER_SPREADSHEET_ID=itera-master-spreadsheet-id:latest,IMPORT_ANALYSIS_TOKEN_SECRET=itera-import-analysis-token-secret:latest
       - --min-instances=1
       - --max-instances=10

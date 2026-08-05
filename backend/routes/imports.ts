@@ -41,10 +41,10 @@ importsRouter.post("/imports/analyze", authorize("import:create"), requireImport
     if (!req.file) return res.status(400).json({ error: "valid_file_required" });
     const period = selectedPeriod(req);
     const fileHash = sha256(req.file.buffer);
-    await assertMalwareScanClean(req.file, fileHash);
+    const scanStatus = await assertMalwareScanClean(req.file, fileHash);
     const { analysis } = await new ImportBatchEngine().analyze(req.file, period, res.locals.principal, fileHash);
-    await appendAuditEvent({ principal: res.locals.principal, action: "import.analyzed", resourceType: "monthly-record-import", resourceId: fileHash, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId });
-    res.json({ analysis, analysisToken: issueAnalysisToken(fileHash, period, res.locals.principal.uid), expiresInSeconds: 900 });
+    await appendAuditEvent({ principal: res.locals.principal, action: "import.analyzed", resourceType: "monthly-record-import", resourceId: fileHash, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `malware-scan:${scanStatus}` });
+    res.json({ analysis, analysisToken: issueAnalysisToken(fileHash, period, res.locals.principal.uid), expiresInSeconds: 900, uploadSecurity: { malwareScan: scanStatus } });
   } catch (error) {
     await appendAuditEvent({ principal: res.locals.principal, action: "import.analysis_failed", resourceType: "monthly-record-import", resourceId: "unidentified", result: "failed", source: "backend", correlationId: res.locals.correlationId, reason: error instanceof Error ? error.name : "UnknownError" }).catch(() => undefined);
     next(error);
@@ -64,7 +64,7 @@ importsRouter.post("/imports/confirm", authorize("import:create"), requireImport
     const fileHash = sha256(req.file.buffer);
     if (typeof req.body.analysisToken !== "string") return res.status(400).json({ error: "analysis_token_required" });
     verifyAnalysisToken(req.body.analysisToken, { fileHash, reportingPeriod: period, actorId: res.locals.principal.uid });
-    await assertMalwareScanClean(req.file, fileHash);
+    const scanStatus = await assertMalwareScanClean(req.file, fileHash);
     reservation = reservationId(period, fileHash);
     await reserveImport(reservation, res.locals.principal.uid, idempotencyKey);
     lock = await acquirePeriodLock(res.locals.principal, period, "Importing");
@@ -72,8 +72,8 @@ importsRouter.post("/imports/confirm", authorize("import:create"), requireImport
     await new MonthlyProcessingService().calculate(period, res.locals.principal);
     await finishImport(reservation, "completed", result.rowsImported);
     await releasePeriodLock(lock, "Available");
-    await appendAuditEvent({ principal: res.locals.principal, action: "import.completed", resourceType: "monthly-record-import", resourceId: result.importBatchId, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId });
-    res.status(201).json({ reportingPeriod: period, ...result });
+    await appendAuditEvent({ principal: res.locals.principal, action: "import.completed", resourceType: "monthly-record-import", resourceId: result.importBatchId, reportingPeriod: period, result: "success", source: "backend", correlationId: res.locals.correlationId, reason: `malware-scan:${scanStatus}` });
+    res.status(201).json({ reportingPeriod: period, ...result, uploadSecurity: { malwareScan: scanStatus } });
   } catch (error) {
     if (reservation) await finishImport(reservation, "failed").catch(() => undefined);
     if (lock) await releasePeriodLock(lock, "Failed").catch(() => undefined);
